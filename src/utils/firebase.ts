@@ -36,6 +36,7 @@ export const getFirebaseConfig = () => {
     messagingSenderId: getEnvVar("VITE_FIREBASE_MESSAGING_SENDER_ID") || getEnvVar("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID"),
     appId: getEnvVar("VITE_FIREBASE_APP_ID") || getEnvVar("NEXT_PUBLIC_FIREBASE_APP_ID"),
     measurementId: getEnvVar("VITE_FIREBASE_MEASUREMENT_ID") || getEnvVar("NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID"),
+    databaseURL: getEnvVar("VITE_FIREBASE_DATABASE_URL") || getEnvVar("NEXT_PUBLIC_FIREBASE_DATABASE_URL"),
   };
 
   const rawMergedConfig = mergeNonEmptyConfig(envConfig, configJson);
@@ -91,7 +92,11 @@ try {
     // Safely init analytics
     isSupported().then(supported => {
         if (supported && config.measurementId) {
-            analyticsInstance = getAnalytics(app as FirebaseApp);
+            try {
+              analyticsInstance = getAnalytics(app as FirebaseApp);
+            } catch (err) {
+              console.warn("Analytics initialization skipped:", err);
+            }
         }
     }).catch(e => console.warn("Analytics not supported", e));
 

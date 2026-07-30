@@ -1,11 +1,12 @@
 {
-  "projectId": "ckcmstudentmanagementsystem",
-  "appId": "1:398863463888:web:a78acb28b6c6cfaf5975d5",
-  "apiKey": "AIzaSyD9qk5HXWdjF8rkpeTCZ5HeDdSfbUEYexc",
-  "authDomain": "ckcmstudentmanagementsystem.firebaseapp.com",
-  "storageBucket": "ckcmstudentmanagementsystem.firebasestorage.app",
-  "messagingSenderId": "398863463888",
-  "measurementId": "",
-  "oAuthClientId": "398863463888-li9olu154g9ej3adv96t3g2c5mnl6fuk.apps.googleusercontent.com",
+  "projectId": "samaritanreviewcentercrimph",
+  "appId": "1:854187303626:web:033749e8f7f147b0020a33",
+  "apiKey": "AIzaSyDIragsfBD4gm1dB5c3mcM7kc-brI49TgE",
+  "authDomain": "samaritanreviewcentercrimph.firebaseapp.com",
+  "databaseURL": "https://samaritanreviewcentercrimph-default-rtdb.asia-southeast1.firebasedatabase.app",
+  "storageBucket": "samaritanreviewcentercrimph.firebasestorage.app",
+  "messagingSenderId": "854187303626",
+  "measurementId": "G-L2L2Z56040",
+  "oAuthClientId": "",
   "recaptchaSiteKey": ""
 }

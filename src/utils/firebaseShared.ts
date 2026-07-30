@@ -7,6 +7,7 @@ export type FirebasePublicConfig = {
   messagingSenderId?: string;
   storageBucket?: string;
   measurementId?: string;
+  databaseURL?: string;
   firestoreDatabaseId?: string;
 };
 
