@@ -82,12 +82,7 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if request.auth != null && (
-        userId == request.auth.uid ||
-        resource.data.uid == request.auth.uid ||
-        resource.data.authUid == request.auth.uid ||
-        isAdminLike()
-      );
+      allow read: if signedIn();
       allow create, update: if isAdminLike() || (request.auth != null && request.auth.uid == userId);
       allow delete: if isAdmin();
 
