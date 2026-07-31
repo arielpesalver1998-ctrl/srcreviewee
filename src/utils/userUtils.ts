@@ -71,14 +71,17 @@ export const ensureUserDocument = async (firebaseUser: User) => {
     lastName: parsedLast,
     last_name: parsedLast.toUpperCase(),
     role: "Reviewee",
-    status: "pending",
-    accountStatus: "pending",
+    status: "active",
+    accountStatus: "active",
     googleLinked: isGoogle ? true : false,
     googleProvider: isGoogle ? true : false,
+    registrationMethod: isGoogle ? "google" : "manual",
+    authProvider: isGoogle ? "google" : "password",
+    profileCompleted: isGoogle ? false : true,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     lastLoginAt: serverTimestamp(),
-    source: "auto-created-login-pending-setup"
+    source: "auto-created-login"
   };
 
   await setDoc(authUserRef, initialProfile, { merge: true });

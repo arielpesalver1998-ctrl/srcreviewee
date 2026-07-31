@@ -641,6 +641,39 @@ function mergeUserScoreData(primary: Record<string, any>, secondary: Record<stri
     }
   });
 
+  // Check email existence in real-time
+  app.get("/api/check-email", async (req, res) => {
+    try {
+      if (!firestoreDb) {
+        return res.json({ exists: false });
+      }
+      const { email } = req.query;
+      if (!email || typeof email !== 'string') {
+        return res.json({ exists: false });
+      }
+      const cleanEmail = email.trim().toLowerCase();
+      const q = query(
+        collection(firestoreDb, "users"),
+        where("email_lower", "==", cleanEmail)
+      );
+      const snap = await withTimeout(getDocs(q), 5000);
+      if (!snap.empty) {
+        return res.json({ exists: true });
+      }
+      const q2 = query(
+        collection(firestoreDb, "users"),
+        where("email", "==", cleanEmail)
+      );
+      const snap2 = await withTimeout(getDocs(q2), 5000);
+      if (!snap2.empty) {
+        return res.json({ exists: true });
+      }
+      res.json({ exists: false });
+    } catch (err: any) {
+      res.json({ exists: false });
+    }
+  });
+
   // Verify candidate PIN code
   app.post("/api/verify-pin", async (req, res) => {
     try {

@@ -208,6 +208,39 @@ export function SignupPage({ onSuccess, onToggleLogin }: SignupPageProps) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [emailDuplicateError, setEmailDuplicateError] = useState<string | null>(null);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+
+  // Debounced email duplicate check
+  useEffect(() => {
+    const clean = email.trim().toLowerCase();
+    if (!clean || !clean.includes('@') || !clean.includes('.')) {
+      setEmailDuplicateError(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setCheckingEmail(true);
+      try {
+        const res = await fetch(`/api/check-email?email=${encodeURIComponent(clean)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.exists) {
+            setEmailDuplicateError("This email address is already registered. Please sign in instead.");
+          } else {
+            setEmailDuplicateError(null);
+          }
+        }
+      } catch (err) {
+        console.warn("Email check error:", err);
+      } finally {
+        setCheckingEmail(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [email]);
+
   // Dark/Light Mode state
   const [darkMode, setDarkMode] = useState(() => {
     return document.documentElement.classList.contains('dark') || localStorage.getItem('theme') === 'dark';
@@ -368,6 +401,11 @@ export function SignupPage({ onSuccess, onToggleLogin }: SignupPageProps) {
       return;
     }
 
+    if (emailDuplicateError) {
+      setError("This email address is already registered. Please sign in instead.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -387,7 +425,8 @@ export function SignupPage({ onSuccess, onToggleLogin }: SignupPageProps) {
         finalSchool,
         finalBranch,
         userMatchChoice === 'yes' ? matchCandidate : null,
-        userMatchChoice === 'no'
+        userMatchChoice === 'no',
+        'manual'
       );
 
       // 3. Send verification email
@@ -831,20 +870,33 @@ export function SignupPage({ onSuccess, onToggleLogin }: SignupPageProps) {
           <label className={labelBase}>
             <Mail size={11} className="text-teal-600 dark:text-[#00B8A9]" /> Email Address
           </label>
-          <input
-            type="email"
-            required
-            placeholder="username@gmail.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value.toLowerCase())}
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            className={inputBase}
-          />
-          <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 ml-1 mt-0.5">
-            You may use any active email address. Verification will be sent to this email.
-          </p>
+          <div className="relative">
+            <input
+              type="email"
+              required
+              placeholder="username@gmail.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value.toLowerCase())}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              className={`${inputBase} ${emailDuplicateError ? '!border-rose-500 !bg-rose-50/30 dark:!bg-rose-950/20' : ''}`}
+            />
+            {checkingEmail && (
+              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-slate-400">
+                Checking...
+              </span>
+            )}
+          </div>
+          {emailDuplicateError ? (
+            <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400 ml-1 mt-1 flex items-center gap-1.5">
+              <span>⚠️</span> {emailDuplicateError}
+            </p>
+          ) : (
+            <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 ml-1 mt-0.5">
+              You may use any active email address. Verification will be sent to this email.
+            </p>
+          )}
         </div>
 
         {/* Passwords in 2 columns */}
@@ -933,7 +985,7 @@ export function SignupPage({ onSuccess, onToggleLogin }: SignupPageProps) {
         {/* Submit */}
         <button
           type="submit"
-          disabled={loading || !allRequirementsMet}
+          disabled={loading || googleLoading || !allRequirementsMet || Boolean(emailDuplicateError)}
           className={pillButton}
         >
           {loading ? (

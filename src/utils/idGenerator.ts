@@ -186,7 +186,8 @@ export async function linkOrCreateUserRecord(
   schoolName: string,
   reviewBranch: string,
   forcedMatchedRecord?: any | null,
-  forceNewAccount?: boolean
+  forceNewAccount?: boolean,
+  registrationSource: 'manual' | 'google' = 'manual'
 ): Promise<LinkOrCreateResult> {
   const db = getClientDb();
   if (!db) {
@@ -231,6 +232,9 @@ export async function linkOrCreateUserRecord(
         seq_id: existingSeqId,
         role: isAdminEmail ? "Admin" : (oldRecord.role || "Reviewee"),
         accountStatus: "active",
+        profileCompleted: true,
+        registrationMethod: registrationSource,
+        authProvider: registrationSource === 'google' ? 'google' : 'password',
         createdAt: oldRecord.created_at || timestamp,
         created_at: oldRecord.created_at || timestamp,
         updatedAt: timestamp,
@@ -281,6 +285,9 @@ export async function linkOrCreateUserRecord(
         seq_id: newSeqId,
         role: isAdminEmail ? "Admin" : "Reviewee",
         accountStatus: "active",
+        profileCompleted: true,
+        registrationMethod: registrationSource,
+        authProvider: registrationSource === 'google' ? 'google' : 'password',
         createdAt: timestamp,
         created_at: timestamp,
         updatedAt: timestamp,
@@ -347,6 +354,9 @@ export async function linkOrCreateUserRecord(
         seq_id: existingSeqId,
         role: isAdminEmail ? "Admin" : (oldRecord.role || "Reviewee"),
         accountStatus: "active",
+        profileCompleted: true,
+        registrationMethod: registrationSource,
+        authProvider: registrationSource === 'google' ? 'google' : 'password',
         createdAt: oldRecord.created_at || timestamp,
         created_at: oldRecord.created_at || timestamp,
         updatedAt: timestamp,
@@ -433,6 +443,9 @@ export async function linkOrCreateUserRecord(
         seq_id: newSeqId,
         role: isAdminEmail ? "Admin" : "Reviewee",
         accountStatus: "active",
+        profileCompleted: true,
+        registrationMethod: registrationSource,
+        authProvider: registrationSource === 'google' ? 'google' : 'password',
         createdAt: timestamp,
         created_at: timestamp,
         updatedAt: timestamp,

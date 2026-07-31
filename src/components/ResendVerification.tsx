@@ -6,7 +6,7 @@ import { GmailIcon } from './GmailIcon';
 interface ResendVerificationProps {
   email: string | null | undefined;
   resendingEmail: boolean;
-  emailMsg?: string;
+  emailMsg?: string | null;
   onCheckVerified: () => void;
   onResendEmail: () => void;
   onLogout: () => void;
@@ -79,16 +79,28 @@ export const ResendVerification: React.FC<ResendVerificationProps> = ({
       </div>
 
       {/* Quick Action: Open Gmail */}
-      <a
-        href="https://mail.google.com"
-        target="_blank"
-        rel="noopener noreferrer"
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          const mobileIntent = 'googlegmail://';
+          const webUrl = 'https://mail.google.com';
+          const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+          if (isMobile) {
+            window.location.href = mobileIntent;
+            setTimeout(() => {
+              window.open(webUrl, '_blank', 'noopener,noreferrer');
+            }, 600);
+          } else {
+            window.open(webUrl, '_blank', 'noopener,noreferrer');
+          }
+        }}
         className="w-full py-3.5 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-teal-500 dark:hover:border-teal-400 text-slate-800 dark:text-white rounded-2xl font-extrabold text-xs tracking-wide uppercase transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-3 cursor-pointer group"
       >
         <GmailIcon className="w-5 h-5 shrink-0" />
         <span>Open Gmail Inbox</span>
         <ExternalLink size={14} className="text-slate-400 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors" />
-      </a>
+      </button>
 
       {/* Status Message feedback if any */}
       {emailMsg && (

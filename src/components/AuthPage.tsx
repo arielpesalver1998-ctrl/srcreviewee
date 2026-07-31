@@ -206,20 +206,30 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             const hasSchool = Boolean(data.school_name || data.schoolName || data.school);
             const hasBranch = Boolean(data.review_branch || data.reviewBranch || data.branch);
 
-            if (!hasName || !hasSchool || !hasBranch) {
+            const isGoogleUser = user.providerData?.some(p => p.providerId === 'google.com') || data.registrationMethod === 'google' || data.authProvider === 'google';
+            const isManualUser = data.registrationMethod === 'manual' || data.authProvider === 'password' || !isGoogleUser;
+
+            const profileCompleted = data.profileCompleted === true || (isManualUser && hasName && hasSchool && hasBranch);
+
+            // CRITICAL: Complete Your Profile card must ONLY be shown to a first-time Google user whose profile is incomplete!
+            if (isGoogleUser && !profileCompleted && (!hasName || !hasSchool || !hasBranch)) {
               setMode('profile-setup');
               return;
             }
 
-            const isGoogleUser = user.providerData?.some(p => p.providerId === 'google.com');
-
-            if (user.emailVerified || isGoogleUser || sandboxBypassRef.current) {
-              onSuccessRef.current(data);
-            } else {
+            if (isManualUser && !user.emailVerified && !sandboxBypassRef.current) {
               setMode('email-verification-pending');
+              return;
             }
+
+            onSuccessRef.current(data);
           } else {
-            setMode('profile-setup');
+            const isGoogleUser = user.providerData?.some(p => p.providerId === 'google.com');
+            if (isGoogleUser) {
+              setMode('profile-setup');
+            } else {
+              onSuccessRef.current({ id: user.uid, email: user.email });
+            }
           }
         }, (err) => {
           if (cancelled) return;

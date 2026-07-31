@@ -202,7 +202,8 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
         finalSchool,
         finalBranch,
         userMatchChoice === 'yes' ? matchCandidate : null,
-        userMatchChoice === 'no'
+        userMatchChoice === 'no',
+        'google'
       );
 
       onCompleted(res);

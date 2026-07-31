@@ -134,9 +134,7 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
   // Filter records by selected folder
   const filteredRecords = useMemo(() => {
     if (!selectedFolder || selectedFolder.id === 'all') return records;
-    const folderRecords = records.filter(r => isFolderMatching(r.scoreFolderId || (r as any).folderId, selectedFolder.id, selectedFolder.name));
-    if (folderRecords.length > 0) return folderRecords;
-    return records;
+    return records.filter(r => isFolderMatching(r.scoreFolderId || (r as any).folderId, selectedFolder.id, selectedFolder.name));
   }, [records, selectedFolder]);
 
   // Aggregate Top-Level Metrics
