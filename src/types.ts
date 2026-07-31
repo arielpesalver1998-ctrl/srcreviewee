@@ -1,3 +1,5 @@
+import { FolderType } from './constants/folderTypes';
+
 export interface Notification {
   id: string;
   recipientId: string;
@@ -16,20 +18,14 @@ export interface Notification {
   readAt?: any;
 }
 
-export type ScoreFolderType = 
-  | 'phase_1'
-  | 'phase_2'
-  | 'phase_3'
-  | 'marathon'
-  | 'final_coaching'
-  | 'pre_board_series'
-  | 'custom';
+export type ScoreFolderType = FolderType;
 
 export interface ScoreFolder {
   id: string;
   name: string;
   normalizedName: string;
-  type: ScoreFolderType;
+  type?: ScoreFolderType;
+  folderType?: ScoreFolderType;
   description?: string;
   
   schoolScope?: 'all' | 'selected';
@@ -40,17 +36,21 @@ export interface ScoreFolder {
   selectedBranchIds?: string[];
   selectedBranchNames?: string[];
 
-  startDate: any;
-  endDate: any | null;
-  publicationStatus: 'published' | 'hidden';
-  isArchived: boolean;
-  includeInReadiness: boolean;
+  startDate?: any;
+  endDate?: any | null;
+  publicationStatus?: 'published' | 'hidden';
+  isArchived?: boolean;
+  isDeleted?: boolean;
+  deletedAt?: any;
+  deletedBy?: string | null;
+
+  includeInReadiness?: boolean;
   readinessWeight?: number;
   displayOrder?: number;
-  createdBy: string;
-  createdAt: any;
-  updatedBy: string;
-  updatedAt: any;
+  createdBy?: string;
+  createdAt?: any;
+  updatedBy?: string;
+  updatedAt?: any;
   archivedAt?: any;
   archivedBy?: string;
   restoredAt?: any;

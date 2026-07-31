@@ -12,6 +12,7 @@ import { motion } from 'motion/react';
 import { useRevieweeMyScoresPreferences } from '../../hooks/useRevieweeMyScoresPreferences';
 import { calculateRevieweeArea } from '../../utils/calculateRevieweeArea';
 import { DEFAULT_GRADE_WEIGHTS, GradeWeights, GradeCategoryKey } from '../../utils/gradeCalculation';
+import { isFolderVisibleToReviewee } from '../../constants/folderTypes';
 
 const DEFAULT_MAIN_SCORE_FOLDER: ScoreFolder = {
   id: 'main',
@@ -42,12 +43,7 @@ export function MyScoresPage({ revieweeData, scores, gradeWeights = DEFAULT_GRAD
   const { folders } = useScoreFolders();
   const publishedFolders = useMemo(() => {
     const validFolders = folders.filter(f => 
-      f && 
-      f.publicationStatus !== 'hidden' && 
-      String(f.publicationStatus || '').toLowerCase() !== 'hidden' && 
-      !f.isArchived && 
-      String(f.isArchived) !== 'true' && 
-      isRevieweeInFolderScope(revieweeData, f)
+      isFolderVisibleToReviewee(f, revieweeData, isRevieweeInFolderScope)
     );
 
     const hasMainScores = scores.some(s => {

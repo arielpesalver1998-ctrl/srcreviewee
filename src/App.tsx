@@ -1,18 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, CheckCircle2, AlertCircle, Bug } from 'lucide-react';
+import { AlertCircle, Bug, WifiOff } from 'lucide-react';
 import { AuthPage } from './components/AuthPage';
 import { SuccessPage } from './components/SuccessPage';
 import { RevieweePortal } from './components/RevieweePortal';
-import { AdminPortal } from './components/AdminPortal';
-import { StaffPortal } from './components/StaffPortal';
-import { SyncModal } from './components/SyncModal';
 import { FirebaseDiagnosticPanel } from './components/FirebaseDiagnosticPanel';
-import { getUserRole, isAdmin, isStaff, isAdminLike } from './utils/roleUtils';
-import { initAuth, logout } from './utils/auth';
+import { logout } from './utils/auth';
 import { firebaseConfigured, getFirebaseConfig } from './utils/firebase';
 import { useBrowserOnlineStatus } from './hooks/useBrowserOnlineStatus';
-import { WifiOff, Loader2 } from 'lucide-react';
 import type { RevieweeData } from './types';
 import { requestNotificationPermission } from './utils/fcm';
 
@@ -22,17 +17,8 @@ export default function App() {
   const [view, setView] = useState<'form' | 'success' | 'portal'>('form');
   const [enrollmentData, setEnrollmentData] = useState<RevieweeData | null>(null);
   const [lastGeneratedId, setLastGeneratedId] = useState<string | null>(null);
-  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
-  const [syncModalTab, setSyncModalTab] = useState<'details' | 'scores' | 'import_scores' | 'archived' | 'leaderboard' | 'activity'>('details');
-  const [syncModalSection, setSyncModalSection] = useState<'main' | 'search' | 'duplicates' | 'mapping'>('main');
-  const [syncModalFolderId, setSyncModalFolderId] = useState<string | undefined>(undefined);
-  const [loading, setLoading] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
-  const [syncProgress, setSyncProgress] = useState<number | undefined>(undefined);
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const [backgroundTasks, setBackgroundTasks] = useState<any[]>([]);
 
   useEffect(() => {
     if (enrollmentData) {
@@ -41,21 +27,12 @@ export default function App() {
   }, [enrollmentData]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('admin') === 'true') {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('admin');
-      window.history.replaceState({}, document.title, url.pathname);
-    }
-
     const checkPath = () => {
       const normalizedPath = decodeURIComponent(window.location.pathname).toLowerCase();
       
-      // GUARD 1: UNAUTHENTICATED USER ACCESS PROTECTION
+      // UNAUTHENTICATED USER ACCESS PROTECTION
       if (!enrollmentData) {
-        setIsSyncModalOpen(false);
         if (
-          normalizedPath.startsWith('/syncsettings') || 
           normalizedPath.startsWith('/admin') || 
           normalizedPath.startsWith('/staff') || 
           normalizedPath.startsWith('/reviewee')
@@ -65,11 +42,8 @@ export default function App() {
         return;
       }
 
-      // GUARD 2: REVIEWEE PORTAL ACCESS ONLY
-      setIsSyncModalOpen(false);
-
+      // REVIEWEE PORTAL ACCESS ONLY
       if (
-        normalizedPath.startsWith('/syncsettings') || 
         normalizedPath.startsWith('/admin') || 
         normalizedPath.startsWith('/staff')
       ) {
@@ -85,38 +59,6 @@ export default function App() {
       window.removeEventListener('popstate', checkPath);
     };
   }, [enrollmentData]);
-
-  const openSyncModal = (section: 'main' | 'search' | 'duplicates' | 'mapping' = 'main', tab: 'details' | 'scores' | 'import_scores' | 'archived' | 'leaderboard' | 'activity' = 'details', folderId?: string) => {
-    let url = '/syncsettings';
-    if (section === 'search') {
-      url += `/search-database/${tab}`;
-    } else if (section === 'duplicates') {
-      url += '/duplicates';
-    } else if (section === 'mapping') {
-      url += '/school-mapping';
-    }
-    window.history.pushState({}, '', url);
-    setSyncModalSection(section);
-    setSyncModalTab(tab);
-    setSyncModalFolderId(folderId);
-    setIsSyncModalOpen(true);
-  };
-
-  const closeSyncModal = () => {
-    if (enrollmentData) {
-      window.history.pushState({}, '', '/reviewee/dashboard');
-    } else {
-      window.history.pushState({}, '', '/login');
-    }
-    setIsSyncModalOpen(false);
-  };
-
-  const normalizeRole = (role: any) =>
-    String(role || "")
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, "")
-      .replace(/-/g, "");
 
   const handleSuccess = React.useCallback((data: RevieweeData) => {
     setEnrollmentData(data);
@@ -139,110 +81,9 @@ export default function App() {
       console.error("Firebase logout error during portal reset:", err);
     }
     setEnrollmentData(null);
-    setIsSyncModalOpen(false);
     setView('form');
     window.history.replaceState({}, '', '/login');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleSync = async (filters: { year: string; schools?: string[]; dateFrom?: string; dateTo?: string; isAutoSync?: boolean }) => {
-    const taskId = Date.now().toString();
-    const newTask = {
-      id: taskId,
-      name: `Sync to Sheet: ${filters.year}`,
-      progress: 0,
-      status: 'working',
-      message: 'Connecting to server...',
-      startTime: new Date()
-    };
-    setBackgroundTasks(prev => [...prev, newTask]);
-
-    const updateTask = (updates: any) => {
-      setBackgroundTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
-    };
-
-    const maxRetries = 2;
-    let attempt = 0;
-    let success = false;
-
-    while (attempt <= maxRetries && !success) {
-      try {
-        if (attempt > 0) {
-          updateTask({ message: `Reconnecting to server (attempt ${attempt + 1})...` });
-          await new Promise(r => setTimeout(r, 1500 * attempt));
-        }
-
-        const response = await fetch('/api/sync-to-sheet', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            adminId: enrollmentData?.seqId || "000126", 
-            adminName: enrollmentData ? `${enrollmentData.first_name} ${enrollmentData.last_name}` : "Admin",
-            adminRole: enrollmentData?.role || "admin",
-            password: "",
-            year: filters.year,
-            schools: filters.schools,
-            dateFrom: filters.dateFrom,
-            dateTo: filters.dateTo,
-            isAutoSync: filters.isAutoSync
-          }),
-        });
-
-        if (!response.ok) {
-          let errText = "";
-          try { errText = await response.text(); } catch(e) {}
-          throw new Error(errText || 'Sync request failed');
-        }
-
-        success = true;
-        
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-        
-        if (reader) {
-          let buffer = '';
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const parts = buffer.split('\n\n');
-            buffer = parts.pop() || '';
-            
-            for (const part of parts) {
-              const line = part.trim();
-              if (line.startsWith('data: ')) {
-                try {
-                  const data = JSON.parse(line.replace('data: ', ''));
-                  if (data.type === 'progress') {
-                    updateTask({ progress: data.progress, message: `Syncing... ${data.progress}%` });
-                  } else if (data.type === 'done') {
-                    updateTask({ progress: 100, status: 'completed', message: 'Sync completed successfully' });
-                  } else if (data.type === 'warning') {
-                    console.warn('Sync warning:', data.error);
-                  } else if (data.type === 'error') {
-                    throw new Error(data.error || 'Unknown sync error');
-                  }
-                } catch (e) {
-                  console.warn('Sync parse notice:', e, line);
-                }
-              }
-            }
-          }
-        } else {
-          updateTask({ progress: 100, status: 'completed', message: 'Sync completed' });
-        }
-      } catch (err: any) {
-        attempt++;
-        const isNetErr = String(err?.message || err || '').toLowerCase().includes('failed to fetch') || 
-                         String(err?.message || err || '').toLowerCase().includes('network error');
-        if (attempt > maxRetries || !isNetErr) {
-          console.warn('Sync attempt notice:', err?.message || err);
-          const friendlyMessage = isNetErr ? 'Network connection interrupted. Please try again.' : (err.message || 'Sync failed');
-          updateTask({ progress: 100, status: 'failed', message: friendlyMessage });
-          break;
-        }
-      }
-    }
   };
 
   const { missingFields: missingKeys } = getFirebaseConfig();
@@ -294,53 +135,6 @@ export default function App() {
   return (
     <div className="min-h-screen w-full relative selection:bg-blue-100 selection:text-blue-900 font-sans flex flex-col">
       <FirebaseDiagnosticPanel isOpen={isDiagnosticsOpen} onClose={() => setIsDiagnosticsOpen(false)} />
-      <AnimatePresence>
-        {backgroundTasks.length > 0 && (
-          <div className="fixed top-6 right-6 z-[100001] flex flex-col gap-3 pointer-events-none">
-            {backgroundTasks.map((task) => (
-              <motion.div 
-                key={task.id}
-                initial={{ opacity: 0, x: 100 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 100 }}
-                className="bg-slate-900 border-l-[3px] border-emerald-500 p-4 w-72 text-white shadow-2xl rounded-xl pointer-events-auto"
-              >
-                <div className="flex justify-between items-center mb-2">
-                  <h3 className="font-bold text-[10px] text-emerald-400 uppercase tracking-wider truncate mr-4">{task.name}</h3>
-                  {(task.status === 'completed' || task.status === 'failed') && (
-                    <button
-                      onClick={() => setBackgroundTasks(prev => prev.filter(t => t.id !== task.id))}
-                      className="text-slate-400 hover:text-white transition-colors"
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-
-                <div className="w-full bg-slate-800 h-1 rounded-full mb-2 overflow-hidden">
-                  <motion.div
-                    className={`${task.status === 'failed' ? 'bg-rose-500' : 'bg-emerald-500'} h-1`}
-                    initial={{ width: 0 }}
-                    animate={{ width: `${task.progress}%` }}
-                  ></motion.div>
-                </div>
-
-                <p className="text-[10px] font-medium text-slate-400 truncate">{task.message}</p>
-                {task.status === 'completed' && (
-                  <div className="mt-2 text-[9px] font-bold text-emerald-500 uppercase flex items-center gap-1">
-                    <CheckCircle2 size={10} /> Completed
-                  </div>
-                )}
-                {task.status === 'failed' && (
-                  <div className="mt-2 text-[9px] font-bold text-rose-500 uppercase flex items-center gap-1">
-                    <AlertCircle size={10} /> Failed
-                  </div>
-                )}
-              </motion.div>
-            ))}
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* Teal Glow Background (Light & Dark mode aware) */}
       <div
@@ -378,21 +172,6 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
-        <SyncModal 
-          isOpen={isSyncModalOpen && view !== 'portal'} 
-          onClose={closeSyncModal} 
-          onSync={handleSync}
-          loading={loading}
-          syncStatus={syncStatus}
-          syncProgress={syncProgress}
-          syncError={syncError}
-          currentUser={enrollmentData}
-          backgroundTasks={backgroundTasks}
-          setBackgroundTasks={setBackgroundTasks}
-          initialTab={syncModalTab}
-          initialSection={syncModalSection}
-          scoreFolderId={syncModalFolderId}
-        />
 
         {/* Main Content Pane */}
         <main className="flex-1 w-full px-4 sm:px-6 py-8 flex flex-col items-center justify-center">
@@ -405,7 +184,7 @@ export default function App() {
             
             {view === 'success' && enrollmentData && (
               <div className="w-full max-w-lg animate-fade-in">
-                <SuccessPage data={enrollmentData} onReset={handleReset} onOpenSyncModal={openSyncModal} onOpenPortal={() => { setView('portal'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+                <SuccessPage data={enrollmentData} onReset={handleReset} onOpenPortal={() => { setView('portal'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
               </div>
             )}
 

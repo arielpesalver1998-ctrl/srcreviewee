@@ -1,7 +1,15 @@
 import React from 'react';
-import { AreaPerformanceCircle } from '../AreaPerformanceCircle';
+import { BoardMajorAreaCard } from './BoardMajorAreaCard';
 
-export function MyScoresBoardSubjectAreas({ areas, selectedArea, onAreaClick }: { areas: any[], selectedArea?: string, onAreaClick: (area: string) => void }) {
+export function MyScoresBoardSubjectAreas({ 
+  areas, 
+  selectedArea, 
+  onAreaClick 
+}: { 
+  areas: any[], 
+  selectedArea?: string, 
+  onAreaClick: (area: string) => void 
+}) {
   return (
     <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="flex justify-between items-center mb-6">
@@ -13,20 +21,33 @@ export function MyScoresBoardSubjectAreas({ areas, selectedArea, onAreaClick }: 
           {areas.length} Board Areas
         </div>
       </div>
-      <div className="overflow-x-auto pb-3">
-        <div className="flex gap-4 min-w-max lg:grid lg:grid-cols-6 lg:w-full">
-          {areas.map((area) => (
-            <div key={area.area} className="w-[180px] shrink-0 lg:w-auto">
-              <AreaPerformanceCircle
-                subject={area.area}
-                percentage={area.percent || 0}
-                subtitle={area.title}
-                isSelected={selectedArea === area.area}
-                onClick={() => onAreaClick(area.area)}
-              />
-            </div>
-          ))}
-        </div>
+      
+      {/* Responsive Grid Layout matching exact specifications */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 w-full">
+        {areas.map((area) => {
+          const colors: Record<string, string> = {
+            CLJ: '#10B981',
+            LEA: '#3B82F6',
+            CDI: '#0D9488',
+            FS: '#8B5CF6',
+            CRIM: '#10B981',
+            CA: '#06B6D4'
+          };
+          const color = colors[area.area.toUpperCase()] || '#10B981';
+
+          return (
+            <BoardMajorAreaCard
+              key={area.area}
+              areaCode={area.area}
+              title={area.title}
+              percentage={area.percent || 0}
+              color={color}
+              watermark={area.area}
+              isSelected={selectedArea === area.area}
+              onClick={() => onAreaClick(area.area)}
+            />
+          );
+        })}
       </div>
     </section>
   );

@@ -3,6 +3,7 @@ import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import { firestoreDb } from '../utils/firebaseClient';
 import { ScoreFolder } from '../types';
 import { logFirestoreError } from '../utils/firestoreErrorHandling';
+import { normalizeScoreFolder } from '../constants/folderTypes';
 
 export function useScoreFolders() {
   const [folders, setFolders] = useState<ScoreFolder[]>([]);
@@ -20,7 +21,9 @@ export function useScoreFolders() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const folderList: ScoreFolder[] = [];
       snapshot.forEach((doc) => {
-        folderList.push({ id: doc.id, ...doc.data() } as ScoreFolder);
+        const data = doc.data();
+        const normalized = normalizeScoreFolder({ id: doc.id, ...data });
+        folderList.push(normalized as unknown as ScoreFolder);
       });
 
       folderList.sort((a, b) => {

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Mail, Lock, Eye, EyeOff, Loader2, Check, Sun, Moon, UserCheck, Inbox, CheckCircle2 } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Loader2, Check, Sun, Moon, UserCheck, Inbox, CheckCircle2, ExternalLink } from 'lucide-react';
 import { auth, googleSignIn } from '../utils/auth';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { initFirebaseClient } from '../utils/firebaseClient';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { PortalLoading } from './PortalLoading';
 import { normalizeEmail } from '../utils/stringUtils';
+import { GmailIcon } from './GmailIcon';
 
 const GoogleIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
   <svg
@@ -370,7 +371,7 @@ export function LoginPage({ onSuccess, onToggleSignup }: LoginPageProps) {
                 {message}
               </p>
               {resetEmailSent && (
-                <div className="mt-2 bg-white/80 dark:bg-slate-900/80 p-3 rounded-xl border border-emerald-200 dark:border-emerald-900/50 text-xs space-y-1.5 shadow-inner">
+                <div className="mt-2 bg-white/80 dark:bg-slate-900/80 p-3 rounded-xl border border-emerald-200 dark:border-emerald-900/50 text-xs space-y-2 shadow-inner">
                   <div className="flex items-center justify-between text-slate-700 dark:text-slate-200 font-semibold">
                     <span>Target Email:</span>
                     <span className="font-mono text-emerald-700 dark:text-emerald-300 font-bold break-all">{resetEmailSent}</span>
@@ -382,6 +383,18 @@ export function LoginPage({ onSuccess, onToggleSignup }: LoginPageProps) {
                     <p>• Password reset links usually arrive within 1–2 minutes.</p>
                     <p>• If using strict network filters or adblockers, allow messages from Samaritan Review Center.</p>
                   </div>
+                  
+                  {/* Direct Open Gmail Button */}
+                  <a
+                    href="https://mail.google.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full mt-2 py-2.5 px-3 bg-white dark:bg-slate-900 border-2 border-emerald-400 dark:border-emerald-600 hover:border-emerald-600 dark:hover:border-emerald-400 rounded-xl font-bold text-xs text-slate-800 dark:text-slate-100 flex items-center justify-center gap-2.5 shadow-sm cursor-pointer transition-all group"
+                  >
+                    <GmailIcon className="w-4 h-4 shrink-0" />
+                    <span>Open Gmail to Reset Password</span>
+                    <ExternalLink size={12} className="text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200" />
+                  </a>
                 </div>
               )}
             </div>

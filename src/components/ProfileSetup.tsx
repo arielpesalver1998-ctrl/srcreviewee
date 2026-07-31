@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GraduationCap, MapPin, Loader2, User, ChevronDown, Check, ArrowRight, AlertCircle, UserCheck, CheckCircle2, Info } from 'lucide-react';
+import { GraduationCap, MapPin, Loader2, User, ChevronDown, Check, ArrowRight, AlertCircle, UserCheck, CheckCircle2, Info, Mail, ExternalLink } from 'lucide-react';
 import { linkOrCreateUserRecord, findMatchingUnlinkedCandidates } from '../utils/idGenerator';
 import { auth, logout } from '../utils/auth';
 import { PortalLoading } from './PortalLoading';
 import { getFriendlyErrorMessage, FriendlyError } from '../utils/getFriendlyErrorMessage';
+import { maskEmail } from '../utils/stringUtils';
+import { GmailIcon } from './GmailIcon';
 
 const DEFAULT_SCHOOLS = [
   "CHRIST THE KING COLLEGE DE MARANDING, INC.",
@@ -406,21 +408,46 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
             <motion.div
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-emerald-50 border border-emerald-300 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs text-emerald-900 font-bold my-2"
+              className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-4 shadow-md space-y-2.5 my-2"
             >
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>
-                  Linked to existing ID: <strong className="font-mono font-black text-emerald-700">{matchCandidate.seq_id || matchCandidate.seqId || matchCandidate.id_number}</strong> (Your scores will be loaded)
-                </span>
+              <div className="flex items-center justify-between gap-2 border-b border-emerald-200/80 pb-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-xs font-bold text-emerald-900">
+                    Linked to ID: <strong className="font-mono font-black text-emerald-700">{matchCandidate.seq_id || matchCandidate.seqId || matchCandidate.id_number}</strong>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setUserMatchChoice('pending')}
+                  className="text-[10px] uppercase font-bold text-emerald-700 hover:underline cursor-pointer"
+                >
+                  Change
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setUserMatchChoice('pending')}
-                className="text-[10px] uppercase font-bold text-emerald-700 hover:underline cursor-pointer"
-              >
-                Change
-              </button>
+
+              <div className="space-y-1 text-xs text-emerald-950 font-medium leading-relaxed">
+                <p>
+                  To open and confirm this account, log in using the registered email address:
+                </p>
+                <div className="bg-white p-2.5 rounded-xl border border-emerald-300 font-mono font-extrabold text-xs text-emerald-900 flex items-center gap-2">
+                  <Mail size={14} className="text-emerald-600 shrink-0" />
+                  <span>{maskEmail(matchCandidate.email || matchCandidate.email_lower || initialData?.email || auth.currentUser?.email || '')}</span>
+                </div>
+                <p className="text-[11px] text-emerald-800 font-semibold pt-0.5">
+                  We sent an email to confirm login. Please check your inbox or sign in using this email address to proceed.
+                </p>
+                <a
+                  href="https://mail.google.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 w-full py-2 px-3 bg-white border border-emerald-300 hover:border-emerald-500 rounded-xl font-bold text-xs text-emerald-950 flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all group"
+                >
+                  <GmailIcon className="w-4 h-4 shrink-0" />
+                  <span>Open Gmail Inbox</span>
+                  <ExternalLink size={12} className="text-emerald-600 group-hover:text-emerald-800" />
+                </a>
+              </div>
             </motion.div>
           )}
 

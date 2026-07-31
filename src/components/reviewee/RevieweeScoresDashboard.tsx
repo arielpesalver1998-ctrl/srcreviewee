@@ -5,6 +5,8 @@ import { ScoreRecord, parseScores } from '../../utils/scoreParser';
 import { normalizeScoreCategory, normalizeScoreSubject } from '../../utils/scoreFieldResolver';
 import { useScoreFolders } from '../../hooks/useScoreFolders';
 import { isRevieweeInFolderScope, isFolderMatching } from '../../utils/folderScope';
+import { BoardMajorAreaCard } from './BoardMajorAreaCard';
+import { isFolderVisibleToReviewee } from '../../constants/folderTypes';
 
 const SUBJECTS_BY_AREA: Record<string, { code: string; title: string }[]> = {
   "CLJ": [
@@ -104,12 +106,7 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
   const { folders } = useScoreFolders();
   const publishedFolders = useMemo(() => {
     const validFolders = folders.filter(f => 
-      f && 
-      f.publicationStatus !== 'hidden' && 
-      String(f.publicationStatus || '').toLowerCase() !== 'hidden' && 
-      !f.isArchived && 
-      String(f.isArchived) !== 'true' &&
-      isRevieweeInFolderScope(currentUser, f)
+      isFolderVisibleToReviewee(f, currentUser, isRevieweeInFolderScope)
     );
     if (validFolders.length === 0) {
       return [DEFAULT_MAIN_SCORE_FOLDER];
@@ -118,10 +115,14 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
   }, [folders, currentUser]);
   const [selectedFolder, setSelectedFolder] = useState<ScoreFolder | null>(null);
   
-  // Set default folder when folders load
+  // Set default folder when folders load or reset if selectedFolder is deleted
   React.useEffect(() => {
-    if (publishedFolders.length > 0 && !selectedFolder) {
-      setSelectedFolder(publishedFolders[0]);
+    if (publishedFolders.length > 0) {
+      if (!selectedFolder || !publishedFolders.some(f => f.id === selectedFolder.id)) {
+        setSelectedFolder(publishedFolders[0]);
+      }
+    } else {
+      setSelectedFolder(null);
     }
   }, [publishedFolders, selectedFolder]);
 
@@ -369,39 +370,30 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
           <h2 className="text-lg font-black text-slate-900 mb-1">Board Major Area</h2>
           <p className="text-xs font-medium text-slate-500 mb-4">Select a major area to view scores by examination category.</p>
           
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {majorAreaStats.map(stat => {
               const isSelected = selectedMajorArea === stat.area;
-              const colorInfo = getScoreColor(stat.rating);
+              const colors: Record<string, string> = {
+                CLJ: '#10B981',
+                LEA: '#3B82F6',
+                CDI: '#0D9488',
+                FS: '#8B5CF6',
+                CRIM: '#10B981',
+                CA: '#06B6D4'
+              };
+              const color = colors[stat.area.toUpperCase()] || '#10B981';
               
               return (
-                <button
+                <BoardMajorAreaCard
                   key={stat.area}
+                  areaCode={stat.area}
+                  title={MAJOR_AREA_TITLES[stat.area] || stat.area}
+                  percentage={stat.rating}
+                  color={color}
+                  watermark={stat.area}
+                  isSelected={isSelected}
                   onClick={() => setSelectedMajorArea(stat.area)}
-                  className={`relative p-4 rounded-xl border text-left transition-all ${
-                    isSelected 
-                      ? 'border-blue-500 bg-blue-50/10 shadow-md ring-1 ring-blue-500' 
-                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                  }`}
-                >
-                  {isSelected && (
-                    <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center">
-                      <Check size={12} strokeWidth={3} />
-                    </div>
-                  )}
-                  <div className="flex flex-col items-center text-center gap-2">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-black ${isSelected ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
-                      {stat.area}
-                    </div>
-                    <div>
-                      <h3 className="font-black text-slate-900 text-sm">{stat.area}</h3>
-                      <p className="text-xs font-bold text-slate-900 mt-0.5">{stat.hasRecords ? `${stat.rating.toFixed(2)}%` : '0.00%'}</p>
-                      <p className={`text-[9px] font-bold mt-0.5 ${stat.hasRecords ? colorInfo.text : 'text-slate-400'}`}>
-                        {stat.hasRecords ? colorInfo.label : 'No Data'}
-                      </p>
-                    </div>
-                  </div>
-                </button>
+                />
               );
             })}
           </div>

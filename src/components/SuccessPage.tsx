@@ -4,13 +4,11 @@ import { CheckCircle2, Download, ChevronRight, User, BookOpen, Printer, CreditCa
 import { toPng } from 'html-to-image';
 import confetti from 'canvas-confetti';
 import { motion } from 'motion/react';
-import { SyncModal } from './SyncModal';
 import type { RevieweeData } from '../types';
 
 interface SuccessPageProps {
   data: RevieweeData;
   onReset: () => void;
-  onOpenSyncModal?: () => void;
   onOpenPortal?: () => void;
 }
 
@@ -44,7 +42,7 @@ function resolveImageUrl(url: string): string {
 
 import { normalizeRole, isAdmin, isStaff, isAdminLike } from '../utils/roleUtils';
 
-export function SuccessPage({ data, onReset, onOpenSyncModal, onOpenPortal }: SuccessPageProps) {
+export function SuccessPage({ data, onReset, onOpenPortal }: SuccessPageProps) {
   const receiptRef = useRef<HTMLDivElement>(null);
   const badgeRef = useRef<HTMLDivElement>(null);
   const [isFlipped, setIsFlipped] = useState(false);

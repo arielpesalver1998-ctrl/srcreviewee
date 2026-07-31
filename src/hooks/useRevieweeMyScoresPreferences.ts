@@ -150,7 +150,7 @@ export function useRevieweeMyScoresPreferences(
     return () => {
       isMounted = false;
     };
-  }, [uid, publishedFolders.length, availableCategories.join(',')]);
+  }, [uid, publishedFolders.map(f => f.id).join(','), availableCategories.join(',')]);
 
   // 2. Save preference function (localStorage immediately, debounced Firestore write)
   const savePreference = useCallback((newPartial: Partial<RevieweeMyScoresPreference>) => {
