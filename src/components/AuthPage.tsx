@@ -4,6 +4,7 @@ import { Mail, CheckCircle, RefreshCw, Loader2, LogOut, ShieldAlert, AlertTriang
 import { LoginPage } from './LoginPage';
 import { SignupPage } from './SignupPage';
 import { ProfileSetup } from './ProfileSetup';
+import { ResendVerification } from './ResendVerification';
 import { GmailIcon } from './GmailIcon';
 import { auth, logout } from '../utils/auth';
 import { firestoreDb, initFirebaseClient } from '../utils/firebaseClient';
@@ -445,76 +446,14 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         )}
 
         {mode === 'email-verification-pending' && (
-          <motion.div
-            key="email-verification"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white/90 dark:bg-[#0B1220]/90 backdrop-blur-md border border-slate-100 dark:border-slate-800 rounded-3xl p-8 sm:p-10 shadow-2xl space-y-6 max-w-md w-full text-center flex flex-col items-center"
-          >
-            <div className="w-16 h-16 rounded-full bg-teal-50 dark:bg-teal-950/50 flex items-center justify-center text-teal-600 dark:text-[#00B8A9] mb-2">
-              <Mail size={32} />
-            </div>
-
-            <div className="space-y-1">
-              <h2 className="text-xl font-extrabold text-slate-800 dark:text-white">Email Verification Required</h2>
-              <p className="text-[11px] font-bold text-teal-600 dark:text-[#00B8A9] uppercase tracking-wider">
-                Action needed to activate profile
-              </p>
-            </div>
-            
-            <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed font-medium">
-              We sent a verification link to <span className="text-teal-600 dark:text-[#00B8A9] font-extrabold">{currentUser?.email}</span>. To complete logging in and activate your account, you must click the link in your email. <span className="font-bold text-rose-600 dark:text-rose-400">If you can't find it in your Inbox, please check your SPAM / Junk folder.</span>
-            </p>
-
-            {/* Direct Open Gmail Button */}
-            <a
-              href="https://mail.google.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-3.5 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-red-400 dark:hover:border-red-500 text-slate-800 dark:text-white rounded-2xl font-black text-xs tracking-wide uppercase transition-all shadow-md flex items-center justify-center gap-3 cursor-pointer group"
-            >
-              <GmailIcon className="w-5 h-5 shrink-0" />
-              <span>Open Gmail Inbox to Confirm</span>
-              <ExternalLink size={14} className="text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200" />
-            </a>
-
-            {emailMsg && (
-              <p className="text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-xl text-teal-700 dark:text-teal-300 font-extrabold w-full">
-                {emailMsg}
-              </p>
-            )}
-
-            <div className="w-full space-y-3 pt-2">
-              <button
-                type="button"
-                onClick={handleCheckEmailVerified}
-                className="w-full py-3.5 bg-teal-600 hover:bg-teal-700 dark:bg-[#00B8A9] dark:hover:bg-teal-600 text-white rounded-2xl font-black text-xs tracking-wider uppercase transition-all shadow-md active:scale-98 cursor-pointer flex items-center justify-center gap-2"
-              >
-                <RefreshCw size={14} />
-                I have verified my email
-              </button>
-
-              <button
-                type="button"
-                disabled={resendingEmail}
-                onClick={handleResendEmail}
-                className="w-full py-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 hover:bg-slate-100/50 text-slate-700 dark:text-slate-200 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2"
-              >
-                {resendingEmail && <Loader2 size={12} className="animate-spin" />}
-                Resend Verification Email
-              </button>
-
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="w-full py-3 bg-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-xs font-semibold hover:underline flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <LogOut size={13} />
-                Logout and use different account
-              </button>
-            </div>
-          </motion.div>
+          <ResendVerification
+            email={currentUser?.email}
+            resendingEmail={resendingEmail}
+            emailMsg={emailMsg}
+            onCheckVerified={handleCheckEmailVerified}
+            onResendEmail={handleResendEmail}
+            onLogout={handleLogout}
+          />
         )}
 
         {mode === 'verification-pending' && (
