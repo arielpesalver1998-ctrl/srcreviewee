@@ -65,7 +65,7 @@ export function PortalBottomMenu({
     <nav
       aria-label="Portal navigation"
       className={cn(
-        "fixed left-1/2 z-[900] w-[calc(100vw-24px)] max-w-md -translate-x-1/2",
+        "fixed left-1/2 z-[900] w-[calc(100%-24px)] max-w-md -translate-x-1/2",
         "bottom-[max(12px,env(safe-area-inset-bottom))]",
         className
       )}
@@ -95,7 +95,7 @@ export function PortalBottomMenu({
                 absolute
                 -top-11
                 left-1/2
-                max-w-[calc(100vw-32px)]
+                max-w-[calc(100%-32px)]
                 -translate-x-1/2
                 rounded-xl
                 border

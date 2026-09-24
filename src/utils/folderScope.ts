@@ -164,8 +164,8 @@ export function isFolderMatching(
   if (!targetFolderId && !targetFolderName) return true;
 
   const recNorm = String(recordFolderId || '').toLowerCase().trim();
-  const idNorm = (targetFolderId || '').toLowerCase().trim();
-  const nameNorm = (targetFolderName || '').toLowerCase().trim();
+  const idNorm = String(targetFolderId || '').toLowerCase().trim();
+  const nameNorm = String(targetFolderName || '').toLowerCase().trim();
 
   // If record has no folder ID specified, it defaults to 'main'
   if (!recNorm || recNorm === 'undefined' || recNorm === 'null') {

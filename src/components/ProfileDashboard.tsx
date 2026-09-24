@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { User, Mail, Building2, MapPin, Key, Shield, Calendar, Camera, Loader2, Save, CheckCircle2, Lock } from 'lucide-react';
+import { User, Mail, Building2, MapPin, Key, Shield, Calendar, Camera, Loader2, Save, CheckCircle2, Lock, FolderSync } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { sendPasswordResetEmail, updateProfile } from 'firebase/auth';
 import { getClientDb } from '../utils/firebaseClient';
 import { auth } from '../utils/auth';
-import { getUserRole } from '../utils/roleUtils';
+import { getUserRole, isAdmin, isSuperAdminEmail, isAdminLike } from '../utils/roleUtils';
+import { getDisplayIdNumber } from '../utils/idResolver';
 import { compressAndConvertToBase64 } from '../utils/imageUtils';
 import { UserAvatar } from './UserAvatar';
+import { AdminFolderSyncViewer } from './AdminFolderSyncViewer';
 
 interface ProfileDashboardProps {
   currentUser: any;
@@ -22,6 +24,7 @@ export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ currentUser,
   const [reviewBranch, setReviewBranch] = useState(currentUser?.review_branch || currentUser?.reviewBranch || '');
   const [photoUrl, setPhotoUrl] = useState(currentUser?.photo_url || currentUser?.photoUrl || '');
   const [pin, setPin] = useState(currentUser?.pin || '');
+  const [showFolderSyncModal, setShowFolderSyncModal] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
@@ -30,7 +33,7 @@ export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ currentUser,
 
   const role = getUserRole(currentUser);
   const uid = currentUser?.uid || currentUser?.id || currentUser?.doc_id || currentUser?.docId;
-  const seqId = currentUser?.seqId || currentUser?.seq_id || currentUser?.id_number || 'SRC-USER';
+  const seqId = getDisplayIdNumber(role as any, currentUser) || currentUser?.seqId || currentUser?.seq_id || currentUser?.id_number || 'No ID assigned';
   const status = currentUser?.accountStatus || currentUser?.status || 'Active';
   const createdAt = currentUser?.createdAt || currentUser?.created_at || currentUser?.timestamp || 'Recently';
 
@@ -151,72 +154,72 @@ export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ currentUser,
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-12">
+    <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6 pb-20 sm:pb-12">
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-teal-700 via-teal-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden flex flex-col sm:flex-row items-center gap-6">
+      <div className="bg-gradient-to-r from-teal-700 via-teal-800 to-slate-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 text-white shadow-xl relative overflow-hidden flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
         <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
         
         {/* Avatar Upload Container */}
         <div className="relative group shrink-0">
-          <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl border-4 border-white/20 overflow-hidden bg-slate-800 shadow-2xl flex items-center justify-center">
+          <div className="w-20 h-20 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-2xl sm:rounded-3xl border-4 border-white/20 overflow-hidden bg-slate-800 shadow-2xl flex items-center justify-center">
             <UserAvatar 
               photoURL={photoUrl} 
               altText={`${firstName} ${lastName}`} 
               className="w-full h-full object-cover" 
             />
           </div>
-          <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-3xl flex flex-col items-center justify-center cursor-pointer text-white text-xs font-bold gap-1">
-            <Camera size={20} />
-            <span>Change Photo</span>
+          <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl sm:rounded-3xl flex flex-col items-center justify-center cursor-pointer text-white text-[11px] sm:text-xs font-bold gap-1">
+            <Camera size={18} />
+            <span>Change</span>
             <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
           </label>
         </div>
 
         {/* User Info Header */}
-        <div className="flex-1 text-center sm:text-left space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-500/20 border border-teal-400/30 text-teal-200 text-xs font-bold">
-            <Shield size={14} />
+        <div className="flex-1 text-center sm:text-left space-y-1.5 sm:space-y-2 min-w-0">
+          <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-teal-500/20 border border-teal-400/30 text-teal-200 text-[11px] sm:text-xs font-bold">
+            <Shield size={13} />
             <span>{role} Portal</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight truncate">
             {firstName} {middleName ? middleName + ' ' : ''}{lastName}
           </h1>
-          <p className="text-teal-100 text-xs sm:text-sm font-medium flex items-center justify-center sm:justify-start gap-2">
-            <Mail size={14} className="text-teal-300" />
-            {email || 'No email attached'}
+          <p className="text-teal-100 text-xs sm:text-sm font-medium flex items-center justify-center sm:justify-start gap-1.5 truncate">
+            <Mail size={13} className="text-teal-300 shrink-0" />
+            <span className="truncate">{email || 'No email attached'}</span>
           </p>
-          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 pt-1 text-xs text-slate-300 font-semibold">
-            <span className="bg-white/10 px-3 py-1 rounded-lg">ID: <strong className="text-white">{seqId}</strong></span>
-            <span className="bg-white/10 px-3 py-1 rounded-lg">Status: <strong className="text-emerald-400 uppercase">{status}</strong></span>
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1 text-xs text-slate-300 font-semibold">
+            <span className="bg-white/10 px-2.5 py-0.5 rounded-lg text-[11px] sm:text-xs">ID: <strong className="text-white">{seqId}</strong></span>
+            <span className="bg-white/10 px-2.5 py-0.5 rounded-lg text-[11px] sm:text-xs">Status: <strong className="text-emerald-400 uppercase">{status}</strong></span>
           </div>
         </div>
       </div>
 
       {successMsg && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-3 text-xs font-bold">
-          <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+        <div className="p-3 sm:p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-2.5 text-xs font-bold">
+          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
 
       {errorMsg && (
-        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl flex items-center gap-3 text-xs font-bold">
+        <div className="p-3 sm:p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl flex items-center gap-2.5 text-xs font-bold">
           <span className="text-rose-600 font-black">Error:</span>
           <span>{errorMsg}</span>
         </div>
       )}
 
       {/* Edit Details Form Card */}
-      <form onSubmit={handleSave} className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+      <form onSubmit={handleSave} className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-sm space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-3">
           <div>
-            <h2 className="text-base font-extrabold text-slate-800">Account Details & Profile Settings</h2>
-            <p className="text-xs text-slate-500 font-medium">Update your personal information, email, school, review branch, and PIN.</p>
+            <h2 className="text-sm sm:text-base font-extrabold text-slate-800">Account Details & Profile Settings</h2>
+            <p className="text-[11px] sm:text-xs text-slate-500 font-medium">Update your personal information, email, school, review branch, and PIN.</p>
           </div>
           <button
             type="submit"
             disabled={saving}
-            className="px-6 py-3 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer flex items-center gap-2"
+            className="px-5 py-2.5 sm:px-6 sm:py-3 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl sm:rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 shrink-0"
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             <span>Save Changes</span>
@@ -332,7 +335,43 @@ export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ currentUser,
             </button>
           </div>
         </div>
+
+        {/* Admin Tools: Score Folders & Sync - STRICTLY ADMIN ONLY */}
+        {(isAdmin(currentUser) || isSuperAdminEmail(currentUser?.email)) && (
+          <div className="border-t border-slate-100 pt-6 mt-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-teal-50/70 border border-teal-200/80 p-5 rounded-2xl">
+              <div>
+                <h3 className="text-sm font-extrabold text-teal-950 flex items-center gap-2">
+                  <FolderSync size={16} className="text-teal-600" /> Admin Score Folders & Firestore Sync
+                </h3>
+                <p className="text-xs text-teal-700 font-medium mt-0.5">
+                  Inspect folders created by the admin account, audit collection sync status, and verify portal score visibility.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFolderSyncModal(true)}
+                className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-sm cursor-pointer shrink-0 flex items-center justify-center gap-2"
+              >
+                <FolderSync size={14} />
+                <span>Manage Folders</span>
+              </button>
+            </div>
+          </div>
+        )}
       </form>
+
+      {showFolderSyncModal && (isAdmin(currentUser) || isSuperAdminEmail(currentUser?.email)) && (
+        <div className="fixed inset-0 z-[100000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-5xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[92vh] flex flex-col animate-in zoom-in-95">
+            <AdminFolderSyncViewer
+              currentUser={currentUser}
+              isModal={true}
+              onClose={() => setShowFolderSyncModal(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

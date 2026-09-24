@@ -9,11 +9,13 @@ import {
   Target,
   Bell,
   Menu,
-  LogOut
+  LogOut,
+  FolderSync,
+  Shield
 } from 'lucide-react';
 import type { RevieweeData } from '../types';
 import { parseScores } from '../utils/scoreParser';
-import { getUserRole } from '../utils/roleUtils';
+import { getUserRole, isAdmin, isStaff, isReviewee, isAdminLike } from '../utils/roleUtils';
 import { getDisplayIdNumber } from '../utils/idResolver';
 import { useFirestoreUsers } from '../hooks/useFirestoreUsers';
 import { useNotifications } from '../hooks/useNotifications';
@@ -23,7 +25,7 @@ import { PortalLayout } from './PortalLayout';
 import { AreaProgressCard, ScoreTrend, getScoreColor, getScoreLabel } from './DashboardShared';
 import { StatCard, ActivityFeed, SimpleTable, SectionHeader, QuickActionsGrid } from './DashboardKit';
 import { ProfileDashboard } from './ProfileDashboard';
-import RevieweeScoresDashboard from './reviewee/RevieweeScoresDashboard';
+import { AdminFolderSyncViewer } from './AdminFolderSyncViewer';
 import { doc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { DEFAULT_GRADE_WEIGHTS, GradeWeights, SubjectArea, GRADE_CATEGORY_LABELS, GradeCategoryKey } from '../utils/gradeCalculation';
 import { calculateRevieweeArea } from '../utils/calculateRevieweeArea';
@@ -44,7 +46,17 @@ const areaTitleMap: Record<string, string> = {
   "COR-AD": "Correctional Administration",
 };
 
-export function RevieweePortal({ data, onLogout }: { data: RevieweeData, onLogout: () => void }) {
+export function RevieweePortal({ 
+  data, 
+  onLogout,
+  onSwitchToAdmin,
+  onSwitchToStaff,
+}: { 
+  data: RevieweeData; 
+  onLogout: () => void;
+  onSwitchToAdmin?: () => void;
+  onSwitchToStaff?: () => void;
+}) {
   const [revieweeData, setRevieweeData] = useState(data);
   
   useEffect(() => {
@@ -74,6 +86,7 @@ export function RevieweePortal({ data, onLogout }: { data: RevieweeData, onLogou
     }
     return localStorage.getItem('reviewee_active_tab') || 'dashboard';
   });
+  const [showAdminFolderModal, setShowAdminFolderModal] = useState(false);
   const { allUsers } = useFirestoreUsers();
   const { notifications } = useNotifications(firestoreDb, data.uid || "");
   
@@ -268,9 +281,38 @@ export function RevieweePortal({ data, onLogout }: { data: RevieweeData, onLogou
   const revieweeName = `${revieweeData.first_name || ''} ${revieweeData.middle_name ? revieweeData.middle_name + ' ' : ''}${revieweeData.last_name || ''}`.trim() || 'Reviewee';
 
   const renderDashboard = () => (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
+      {/* Admin Folder Sync Banner */}
+      {isAdminLike(revieweeData) && (
+        <div className="bg-gradient-to-r from-slate-900 to-teal-950 text-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 border border-teal-500/30 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center text-teal-300 shrink-0">
+              <FolderSync size={20} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
+                Admin Score Folders & Sync Hub
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-teal-500/20 text-teal-300 border border-teal-400/30">
+                  Admin Tools
+                </span>
+              </h3>
+              <p className="text-[11px] sm:text-xs text-slate-300 font-medium mt-0.5 line-clamp-1 sm:line-clamp-none">
+                Verify folders created in Firebase Firestore, audit dual-collection sync, and manage portal publication status.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowAdminFolderModal(true)}
+            className="px-3.5 py-2 sm:px-4 sm:py-2.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-md shrink-0 flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <span>Verify Folders</span>
+            <ArrowRight size={14} />
+          </button>
+        </div>
+      )}
+
       {/* KPI Row */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
         <StatCard
           label="Overall Average"
           value={scores.length > 0 ? `${Number(avgScore).toFixed(2)}%` : '0.00%'}
@@ -317,19 +359,19 @@ export function RevieweePortal({ data, onLogout }: { data: RevieweeData, onLogou
       />
 
       {/* Trend + Latest Results */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-5">
         <div className="xl:col-span-3">
           <ScoreTrend trendData={trendData} />
         </div>
 
-        <section className="xl:col-span-2 rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="xl:col-span-2 rounded-2xl sm:rounded-[1.5rem] border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
           <SectionHeader title="Latest Results" onViewAll={() => handleTabChange('scores')} />
           <ActivityFeed items={latestResultsItems} emptyLabel="No scores encoded yet." />
         </section>
       </div>
 
       {/* Detailed Score History */}
-      <section className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-2xl sm:rounded-[1.5rem] border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
         <SectionHeader title="Recent Score Logs" onViewAll={() => handleTabChange('scores')} />
         <SimpleTable 
           rows={latestTableRows}
@@ -354,10 +396,29 @@ export function RevieweePortal({ data, onLogout }: { data: RevieweeData, onLogou
       </section>
 
       {/* Quick Access Grid */}
-      <section className="space-y-3">
+      <section className="space-y-2.5 sm:space-y-3">
         <h3 className="px-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Student Utilities</h3>
         <QuickActionsGrid 
           actions={[
+            ...(isAdmin(revieweeData) && onSwitchToAdmin
+              ? [
+                  {
+                    key: 'admin-console',
+                    label: 'Admin Console',
+                    icon: <Shield size={18} className="text-teal-600" />,
+                    onClick: onSwitchToAdmin,
+                  },
+                ]
+              : isStaff(revieweeData) && onSwitchToStaff
+              ? [
+                  {
+                    key: 'staff-console',
+                    label: 'Staff Portal',
+                    icon: <Shield size={18} className="text-blue-600" />,
+                    onClick: onSwitchToStaff,
+                  },
+                ]
+              : []),
             { key: 'scores', label: 'Score History', icon: <ClipboardList size={18} />, onClick: () => handleTabChange('scores') },
             { key: 'eval', label: 'Daily Evaluation', icon: <Calendar size={18} />, onClick: () => handleTabChange('daily') },
             { key: 'progress', label: 'Progress Analytics', icon: <TrendingUp size={18} />, onClick: () => handleTabChange('progress') },
@@ -369,9 +430,9 @@ export function RevieweePortal({ data, onLogout }: { data: RevieweeData, onLogou
   );
 
   const renderProgress = () => (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <SectionHeader title="Progress Analytics" />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2.5 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           label="Overall Average"
           value={scores.length > 0 ? `${avgScore}%` : '0.00%'}
@@ -408,22 +469,22 @@ export function RevieweePortal({ data, onLogout }: { data: RevieweeData, onLogou
         }))}
       />
 
-      <section className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-2xl sm:rounded-[1.5rem] border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
         <ScoreTrend trendData={trendData} />
       </section>
     </div>
   );
 
   const renderResults = () => (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <SectionHeader title="Evaluation Results" />
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
-        <section className="xl:col-span-2 rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-5">
+        <section className="xl:col-span-2 rounded-2xl sm:rounded-[1.5rem] border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
           <SectionHeader title="Latest Evaluation Feeds" />
           <ActivityFeed items={latestResultsItems} emptyLabel="No scores encoded yet." />
         </section>
 
-        <section className="xl:col-span-3 rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="xl:col-span-3 rounded-2xl sm:rounded-[1.5rem] border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
           <SectionHeader title="Full Score Records" />
           <SimpleTable 
             rows={scores}
@@ -450,91 +511,93 @@ export function RevieweePortal({ data, onLogout }: { data: RevieweeData, onLogou
     </div>
   );
 
-  const navItems = [
-    { key: 'dashboard', label: 'Home', icon: <LayoutDashboard size={18} /> },
-    { key: 'scores', label: 'Scores', icon: <ClipboardList size={18} /> },
+  const drawerNavItems = [
+    { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
+    { key: 'my-scores', label: 'My Scores', icon: <ClipboardList size={18} /> },
+    { key: 'progress', label: 'Progress Analytics', icon: <TrendingUp size={18} /> },
+    { key: 'results', label: 'Evaluation Results', icon: <Award size={18} /> },
+    { key: 'profile', label: 'My Profile', icon: <User size={18} /> },
+  ];
+
+  const bottomNavItems = [
+    { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
+    { key: 'my-scores', label: 'Scores', icon: <ClipboardList size={18} /> },
+    { key: 'progress', label: 'Progress', icon: <TrendingUp size={18} /> },
+    { key: 'results', label: 'Results', icon: <Award size={18} /> },
     { key: 'profile', label: 'Profile', icon: <User size={18} /> },
   ];
 
-  const handleMessengerClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    // Basic handler for Messenger if needed
-  };
+  const revieweeId = getDisplayIdNumber("Reviewee", revieweeData) || 'No ID assigned';
 
   return (
-    <div className="flex h-[100dvh] w-full flex-col bg-slate-50 overflow-hidden">
-      {/* Compact Mobile Header */}
-      <header className="sticky top-0 z-40 flex h-auto min-h-[64px] items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur-md shrink-0">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          <UserAvatar 
-            photoURL={revieweeData?.photo_url || revieweeData?.photoUrl} 
-            altText={revieweeName} 
-            size={36} 
-            className="h-9 w-9 shrink-0 rounded-xl object-cover border border-slate-100 bg-white shadow-sm" 
-          />
-          <div className="flex flex-col min-w-0">
-            <h1 className="truncate text-sm font-bold tracking-tight text-slate-900">{revieweeName}</h1>
-            <span className="truncate text-xs font-medium text-slate-500 mt-0.5">ID: {getDisplayIdNumber("Reviewee", revieweeData) || 'No ID'}</span>
-          </div>
-        </div>
+    <div className="h-full w-full">
+      <PortalLayout
+        title={revieweeName}
+        subtitle="Reviewee Portal"
+        role="Reviewee"
+        roleDetail={revieweeName}
+        seqId={revieweeId}
+        idNumber={revieweeId}
+        photoURL={revieweeData?.photo_url || revieweeData?.photoUrl}
+        activeTab={activeTab === 'scores' ? 'my-scores' : activeTab}
+        onTabChange={handleTabChange}
+        onLogout={onLogout}
+        db={firestoreDb}
+        navItems={drawerNavItems}
+        footerItems={bottomNavItems}
+        headerRightExtra={
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {isAdmin(revieweeData) && onSwitchToAdmin && (
+              <button
+                onClick={onSwitchToAdmin}
+                className="flex h-8 sm:h-9 items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 rounded-xl bg-slate-900 text-teal-300 hover:bg-slate-800 transition-colors border border-slate-700 font-black text-[11px] sm:text-xs shadow-sm cursor-pointer"
+                title="Return to Admin Dashboard"
+              >
+                <Shield size={13} className="text-teal-400" />
+                <span className="hidden xs:inline">Admin Dashboard</span>
+                <span className="xs:hidden">Admin</span>
+              </button>
+            )}
 
-        <div className="flex items-center gap-2 shrink-0 ml-3">
-          <div className="relative group">
-            <a
-              href="https://www.messenger.com/j/AbaK9Q9EUN0N4VmQ/?send_source=gc%3Acopy_invite_link_c"
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={handleMessengerClick}
-              className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors select-none"
-              title="Open Messenger"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-blue-600">
-                <path d="M12 2C6.36 2 2 6.13 2 11.7c0 2.91 1.34 5.57 3.51 7.37v3.75c0 .35.39.55.68.34l3.37-2.48c.8.23 1.63.35 2.48.35 5.64 0 10-4.13 10-9.7S17.64 2 12 2zm1.18 12.87l-2.6-2.77-5.07 2.77 5.57-5.91 2.62 2.77 5.05-2.77-5.57 5.91z" />
-              </svg>
-            </a>
-          </div>
-          
-          <button
-            onClick={onLogout}
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"
-            title="Sign Out"
-          >
-            <LogOut size={16} />
-          </button>
-        </div>
-      </header>
+            {isStaff(revieweeData) && onSwitchToStaff && (
+              <button
+                onClick={onSwitchToStaff}
+                className="flex h-8 sm:h-9 items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 rounded-xl bg-blue-900 text-blue-200 hover:bg-blue-800 transition-colors border border-blue-700 font-black text-[11px] sm:text-xs shadow-sm cursor-pointer"
+                title="Return to Staff Dashboard"
+              >
+                <Shield size={13} className="text-blue-400" />
+                <span className="hidden xs:inline">Staff Dashboard</span>
+                <span className="xs:hidden">Staff</span>
+              </button>
+            )}
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto scroll-smooth px-4 pb-[calc(80px+env(safe-area-inset-bottom))] pt-6 custom-scrollbar">
+            {isAdmin(revieweeData) && (
+              <button
+                onClick={() => setShowAdminFolderModal(true)}
+                className="flex h-8 sm:h-9 items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors border border-teal-200/80 font-bold text-[11px] sm:text-xs shadow-sm cursor-pointer"
+                title="Admin Folder Synchronization"
+              >
+                <FolderSync size={14} className="text-teal-600" />
+                <span className="hidden sm:inline">Folder Sync</span>
+              </button>
+            )}
+          </div>
+        }
+      >
         <div className="mx-auto max-w-5xl">
-          {activeTab === "dashboard" && renderDashboard()}
-          {activeTab === "my-scores" && (
+          {(activeTab === "dashboard" || activeTab === "daily") && renderDashboard()}
+          {(activeTab === "my-scores" || activeTab === "scores") && (
             <MyScoresPage 
               revieweeData={revieweeData} 
               scores={scores}
               gradeWeights={gradeWeights}
             />
           )}
-          {activeTab === "scores" && (
-            <RevieweeScoresDashboard
-              currentUser={revieweeData}
-            />
-          )}
+          {activeTab === "progress" && renderProgress()}
+          {activeTab === "results" && renderResults()}
           {activeTab === "profile" && <ProfileDashboard currentUser={revieweeData} onUpdate={setRevieweeData} />}
         </div>
-      </main>
-
-      {/* Touch-Friendly Bottom Navigation */}
-      <div className="block">
-        <PortalBottomMenu
-          items={navItems.map(item => ({
-            id: item.key,
-            label: item.label,
-            icon: item.icon,
-          }))}
-          activeId={activeTab === 'my-scores' ? 'scores' : activeTab}
-          onSelect={handleTabChange}
-        />
-      </div>
+      </PortalLayout>
 
       {selectedSubjectBreakdown && (
         <AreaPerformanceModal
@@ -548,6 +611,18 @@ export function RevieweePortal({ data, onLogout }: { data: RevieweeData, onLogou
           totalEarned={selectedSubjectBreakdown.totalEarned}
           totalPossible={selectedSubjectBreakdown.totalPossible}
         />
+      )}
+
+      {showAdminFolderModal && isAdmin(revieweeData) && (
+        <div className="fixed inset-0 z-[100000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-5xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[92vh] flex flex-col animate-in zoom-in-95">
+            <AdminFolderSyncViewer
+              currentUser={revieweeData}
+              isModal={true}
+              onClose={() => setShowAdminFolderModal(false)}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

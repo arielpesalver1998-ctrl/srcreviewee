@@ -25,13 +25,31 @@ export const normalizeLegacyRole = (role: any): AppRole => {
   return "Reviewee";
 };
 
-export const getUserRole = (user: any): AppRole => {
-  return normalizeLegacyRole(
-    user?.role ||
-      user?.userRole ||
-      user?.accountType ||
-      user?.type
+export const isSuperAdminEmail = (email?: string | null): boolean => {
+  if (!email) return false;
+  const clean = String(email).trim().toLowerCase();
+  return (
+    clean === 'arielpesalver1998@gmail.com' ||
+    clean === 'arielpesalver@ckcm.edu.ph'
   );
+};
+
+export const getUserRole = (user: any): AppRole => {
+  if (!user) return "Reviewee";
+
+  // 1. Explicit document role takes top priority!
+  const explicitRole = user?.role ?? user?.userRole ?? user?.role_name ?? user?.accountType;
+  if (explicitRole !== undefined && explicitRole !== null && String(explicitRole).trim() !== "") {
+    return normalizeLegacyRole(explicitRole);
+  }
+
+  // 2. Fallback to super admin email check ONLY if no explicit role is defined on the record
+  const email = user?.email || user?.normalizedEmail || user?.email_lower;
+  if (isSuperAdminEmail(email)) {
+    return "Admin";
+  }
+
+  return "Reviewee";
 };
 
 export const isAdmin = (user: any): boolean => {

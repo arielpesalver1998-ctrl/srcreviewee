@@ -199,7 +199,6 @@ export async function linkOrCreateUserRecord(
     const uLastName = normalizeStr(lastName);
     const uFirstName = normalizeStr(firstName);
     const cleanEmail = normalizeEmail(email);
-    const isAdminEmail = cleanEmail === "arielpesalver1998@gmail.com" || cleanEmail === "arielpesalver@ckcm.edu.ph" || (uFirstName === "ARIEL" && uLastName === "PESALVER");
     const timestamp = new Date().toISOString();
 
     // 0. CASE: User explicitly confirmed "Yes, this is me" for forcedMatchedRecord
@@ -230,7 +229,7 @@ export async function linkOrCreateUserRecord(
         branch: reviewBranch || oldRecord.branch,
         srcId: existingSeqId,
         seq_id: existingSeqId,
-        role: isAdminEmail ? "Admin" : (oldRecord.role || "Reviewee"),
+        role: oldRecord.role || "Reviewee",
         accountStatus: "active",
         profileCompleted: true,
         registrationMethod: registrationSource,
@@ -283,7 +282,7 @@ export async function linkOrCreateUserRecord(
         branch: reviewBranch,
         srcId: newSeqId,
         seq_id: newSeqId,
-        role: isAdminEmail ? "Admin" : "Reviewee",
+        role: "Reviewee",
         accountStatus: "active",
         profileCompleted: true,
         registrationMethod: registrationSource,
@@ -352,7 +351,7 @@ export async function linkOrCreateUserRecord(
         branch: reviewBranch,
         srcId: existingSeqId,
         seq_id: existingSeqId,
-        role: isAdminEmail ? "Admin" : (oldRecord.role || "Reviewee"),
+        role: oldRecord.role || "Reviewee",
         accountStatus: "active",
         profileCompleted: true,
         registrationMethod: registrationSource,
@@ -399,7 +398,7 @@ export async function linkOrCreateUserRecord(
         reviewBranch,
         review_branch: normalizeStr(reviewBranch),
         branch: reviewBranch,
-        role: isAdminEmail ? "Admin" : "Reviewee",
+        role: "Reviewee",
         accountStatus: "pending_verification",
         createdAt: timestamp,
         created_at: timestamp,
@@ -441,7 +440,7 @@ export async function linkOrCreateUserRecord(
         branch: reviewBranch,
         srcId: newSeqId,
         seq_id: newSeqId,
-        role: isAdminEmail ? "Admin" : "Reviewee",
+        role: "Reviewee",
         accountStatus: "active",
         profileCompleted: true,
         registrationMethod: registrationSource,
@@ -488,7 +487,6 @@ export async function activateExistingWithPin(
   const uFirstName = normalizeStr(firstName);
   const uPin = String(pin || '').trim();
   const cleanEmail = email.trim().toLowerCase();
-  const isAdminEmail = cleanEmail === "arielpesalver1998@gmail.com" || cleanEmail === "arielpesalver@ckcm.edu.ph" || (uFirstName === "ARIEL" && uLastName === "PESALVER");
 
   if (!uPin) {
     throw new Error("Please enter your PIN code.");
@@ -542,7 +540,7 @@ export async function activateExistingWithPin(
       review_branch: normalizeStr(matchedRecord.reviewBranch || matchedRecord.review_branch),
       srcId: existingSeqId,
       seq_id: existingSeqId,
-      role: isAdminEmail ? "Admin" : (matchedRecord.role || "Reviewee"),
+      role: matchedRecord.role || "Reviewee",
       accountStatus: "active",
       createdAt: matchedRecord.created_at || matchedRecord.createdAt || timestamp,
       created_at: matchedRecord.created_at || matchedRecord.createdAt || timestamp,

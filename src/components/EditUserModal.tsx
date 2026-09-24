@@ -3,7 +3,8 @@ import { X, Save, AlertTriangle, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { AnimatedSelect } from './ui/animated-select';
-import { cleanOptionalName, formatFormalName } from '../services/userIdentityResolver';
+import { cleanOptionalName, formatFormalName, canonicalizeIdNumber } from '../services/userIdentityResolver';
+import { getUserRole, AppRole } from '../utils/roleUtils';
 
 interface EditUserModalProps {
   user: any;
@@ -11,15 +12,16 @@ interface EditUserModalProps {
   onClose: () => void;
   onSave: (updatedUser: any) => Promise<void>;
   currentUserRole?: string;
+  allUsers?: any[];
 }
 
-export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onClose, onSave, currentUserRole }) => {
+export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onClose, onSave, currentUserRole, allUsers = [] }) => {
   const [formData, setFormData] = useState({
     firstName: user.firstName || user.first_name || '',
     middleName: cleanOptionalName(user.middleName || user.middle_name || ''),
     lastName: user.lastName || user.last_name || '',
     email: user.email || '',
-    role: user.role || user.role_name || 'Reviewee',
+    role: getUserRole(user),
     seqId: user.seqId || user.seq_id || user.id_number || '',
   });
   const [isConfirming, setIsConfirming] = useState(false);
@@ -28,7 +30,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
   if (!isOpen) return null;
 
   const isStaffLoggedIn = currentUserRole === 'Staff';
-  const targetIsAdmin = user.role === 'Admin' || user.role === 'Staff';
+  const targetIsAdmin = getUserRole(user) === 'Admin' || getUserRole(user) === 'Staff';
   const isEditingForbidden = isStaffLoggedIn && targetIsAdmin;
 
   const availableRoles = isStaffLoggedIn ? ['Reviewee'] : ['Admin', 'Staff', 'Reviewee'];
@@ -38,6 +40,25 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
       alert("Staff members can only edit Reviewee users.");
       return;
     }
+
+    // Enforce ONE USER PER ID NUMBER
+    const candidateId = canonicalizeIdNumber(formData.seqId);
+    if (candidateId) {
+      const targetUserId = user.uid || user.id || user.doc_id;
+      const collision = allUsers.find((u) => {
+        const otherId = u.uid || u.id || u.doc_id;
+        if (otherId === targetUserId) return false;
+        const otherSeqId = canonicalizeIdNumber(u.seqId || u.seq_id || u.id_number || u.srcId);
+        return otherSeqId === candidateId;
+      });
+
+      if (collision) {
+        const otherName = [collision.firstName || collision.first_name, collision.lastName || collision.last_name].filter(Boolean).join(' ') || collision.email || 'another user';
+        alert(`ID Number "${formData.seqId}" is already assigned to ${otherName}. Only one user per ID number is permitted.`);
+        return;
+      }
+    }
+
     setIsConfirming(true);
   };
 
@@ -45,9 +66,14 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
     setIsSaving(true);
     try {
       const cleanedMiddle = cleanOptionalName(formData.middleName);
+      const cleanSeqId = formData.seqId.trim().toUpperCase();
       await onSave({
         ...user,
         ...formData,
+        role: formData.role,
+        userRole: formData.role,
+        seqId: cleanSeqId,
+        seq_id: cleanSeqId,
         middleName: cleanedMiddle,
         middle_name: cleanedMiddle,
         middle_initial: cleanedMiddle ? `${cleanedMiddle.charAt(0).toUpperCase()}.` : '',
@@ -121,7 +147,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
               <AnimatedSelect
                 value={formData.role}
                 options={availableRoles.map(r => ({ value: r, label: r }))}
-                onChange={(r) => setFormData({...formData, role: r})}
+                onChange={(r) => setFormData({...formData, role: r as AppRole})}
                 placeholder="Select Role"
                 searchable={false}
                 disabled={isEditingForbidden}

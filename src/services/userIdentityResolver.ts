@@ -1,3 +1,5 @@
+import { getUserRole } from '../utils/roleUtils';
+
 export type CanonicalUserIdentity = {
   userDocId: string;
   firebaseUid: string;
@@ -49,6 +51,15 @@ export function normalizeForSort(value: unknown): string {
 export function normalizeIdNumber(value: unknown): string {
   if (value === undefined || value === null) return "";
   return String(value).trim();
+}
+
+export function canonicalizeIdNumber(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  const s = String(value).trim();
+  if (!s || s === "—" || s === "-" || s.toLowerCase() === "n/a" || s.toLowerCase() === "none") {
+    return "";
+  }
+  return s.toUpperCase().replace(/\s+/g, " ");
 }
 
 export function formatFullName({
@@ -309,12 +320,7 @@ export function resolveCanonicalUserIdentity(user: any): CanonicalUserIdentity {
     ""
   ).trim();
 
-  const role = String(
-    user.role ??
-    user.userRole ??
-    user.accountType ??
-    "Reviewee"
-  ).trim();
+  const role = getUserRole(user);
 
   const school = String(
     user.school ??
@@ -365,4 +371,179 @@ export function resolveCanonicalUserIdentity(user: any): CanonicalUserIdentity {
     profilePicture,
     isArchived,
   };
+}
+
+/**
+ * Merges two duplicate user records into one canonical representation.
+ * Preserves scores, ensures reviewee identity is prioritized for student IDs,
+ * and maintains full profile attributes.
+ */
+function mergeDuplicateUserRecords(prev: any, incoming: any): any {
+  if (!prev) return incoming;
+  if (!incoming) return prev;
+
+  const prevRole = getUserRole(prev);
+  const incRole = getUserRole(incoming);
+
+  // If this record has a student ID number and either record is Reviewee, keep Reviewee
+  let chosenRole = prevRole;
+  if (prevRole === "Reviewee" || incRole === "Reviewee") {
+    chosenRole = "Reviewee";
+  } else if (prevRole === "Staff" || incRole === "Staff") {
+    chosenRole = "Staff";
+  } else {
+    chosenRole = "Admin";
+  }
+
+  // Combine scores so historical scores are never lost
+  const mergedScoresByDate = {
+    ...(prev.scoresByDate || {}),
+    ...(incoming.scoresByDate || {}),
+  };
+
+  const mergedAssessmentRecords = {
+    ...(prev.assessmentRecords || {}),
+    ...(incoming.assessmentRecords || {}),
+  };
+
+  // Combine score / diagnostic / exam fields
+  const scoreFields: Record<string, any> = {};
+  [prev, incoming].forEach(record => {
+    Object.keys(record).forEach(k => {
+      if (
+        k.startsWith('score_') ||
+        k.startsWith('diag_') ||
+        k.startsWith('preboard_') ||
+        k.startsWith('post_') ||
+        k.startsWith('final_')
+      ) {
+        if (record[k] !== undefined && record[k] !== null && record[k] !== '') {
+          scoreFields[k] = record[k];
+        }
+      }
+    });
+  });
+
+  // Prefer authentic Firebase UID if available
+  const chosenUid = (incoming.authUid || incoming.firebaseUid || incoming.uid) ||
+                    (prev.authUid || prev.firebaseUid || prev.uid);
+
+  const chosenSeqId = incoming.seqId || incoming.seq_id || incoming.id_number || incoming.srcId ||
+                      prev.seqId || prev.seq_id || prev.id_number || prev.srcId || "";
+
+  return {
+    ...prev,
+    ...incoming,
+    ...scoreFields,
+    uid: chosenUid,
+    id: chosenUid || prev.id || incoming.id,
+    doc_id: chosenUid || prev.doc_id || incoming.doc_id,
+    seqId: chosenSeqId,
+    seq_id: chosenSeqId,
+    role: chosenRole,
+    userRole: chosenRole,
+    scoresByDate: Object.keys(mergedScoresByDate).length > 0 ? mergedScoresByDate : prev.scoresByDate,
+    assessmentRecords: Object.keys(mergedAssessmentRecords).length > 0 ? mergedAssessmentRecords : prev.assessmentRecords,
+    email: (incoming.email && !incoming.email.includes("placeholder")) ? incoming.email : (prev.email || incoming.email || ""),
+    firstName: incoming.firstName || prev.firstName || incoming.first_name || prev.first_name || "",
+    first_name: incoming.first_name || prev.first_name || incoming.firstName || prev.firstName || "",
+    middleName: cleanOptionalName(incoming.middleName || prev.middleName || incoming.middle_name || prev.middle_name),
+    middle_name: cleanOptionalName(incoming.middle_name || prev.middle_name || incoming.middleName || prev.middleName),
+    lastName: incoming.lastName || prev.lastName || incoming.last_name || prev.last_name || "",
+    last_name: incoming.last_name || prev.last_name || incoming.lastName || prev.lastName || "",
+    school_name: incoming.school_name || prev.school_name || incoming.school || prev.school || "",
+    school: incoming.school || prev.school || incoming.school_name || prev.school_name || "",
+    review_branch: incoming.review_branch || prev.review_branch || incoming.branch || prev.branch || "",
+    branch: incoming.branch || prev.branch || incoming.review_branch || prev.review_branch || "",
+    pin: incoming.pin || prev.pin || "",
+    accountStatus: (incoming.accountStatus && incoming.accountStatus !== 'merged') ? incoming.accountStatus : (prev.accountStatus || 'active'),
+    status: (incoming.status && incoming.status !== 'merged') ? incoming.status : (prev.status || 'active'),
+  };
+}
+
+/**
+ * Deduplicates any user list to strictly guarantee ONLY ONE USER PER ID NUMBER.
+ * If multiple documents in Firestore share the same sequence/student ID,
+ * they are merged into a single canonical user record.
+ */
+export function deduplicateUsersByIdNumber<T = any>(users: T[]): T[] {
+  if (!Array.isArray(users)) return [];
+
+  const seenIds = new Map<string, any>();
+  const seenEmails = new Map<string, any>();
+  const seenUids = new Map<string, any>();
+
+  for (const rawUser of users) {
+    if (!rawUser || typeof rawUser !== 'object') continue;
+    const u = rawUser as any;
+
+    const status = String(u.accountStatus || u.status || "").toLowerCase();
+    if (status === "merged" || status === "deleted" || u.isDeleted || u.deleted || u.is_deleted) {
+      continue;
+    }
+
+    const canonical = resolveCanonicalUserIdentity(u);
+    const idKey = canonicalizeIdNumber(
+      canonical.idNumber || u.seqId || u.seq_id || u.id_number || u.srcId || u.studentId || u.student_id
+    );
+
+    const email = String(canonical.email || u.email || "").trim().toLowerCase();
+    const uid = String(u.uid || u.id || u.doc_id || "").trim();
+
+    if (idKey) {
+      // 1. Group by unique ID number
+      if (!seenIds.has(idKey)) {
+        seenIds.set(idKey, u);
+      } else {
+        const existing = seenIds.get(idKey);
+        const merged = mergeDuplicateUserRecords(existing, u);
+        seenIds.set(idKey, merged);
+      }
+    } else if (email) {
+      // 2. Pure accounts without an ID number: deduplicate by email
+      const emailKey = `email:${email}`;
+      if (!seenEmails.has(emailKey)) {
+        seenEmails.set(emailKey, u);
+      } else {
+        const existing = seenEmails.get(emailKey);
+        const merged = mergeDuplicateUserRecords(existing, u);
+        seenEmails.set(emailKey, merged);
+      }
+    } else if (uid) {
+      // 3. Fallback: key by UID
+      const uidKey = `uid:${uid}`;
+      if (!seenUids.has(uidKey)) {
+        seenUids.set(uidKey, u);
+      } else {
+        const existing = seenUids.get(uidKey);
+        const merged = mergeDuplicateUserRecords(existing, u);
+        seenUids.set(uidKey, merged);
+      }
+    }
+  }
+
+  const result: T[] = [];
+
+  // Add all unique ID number users
+  seenIds.forEach((user) => result.push(user));
+
+  // Add all unique email users that do not already have an ID number in seenIds
+  seenEmails.forEach((user) => {
+    const idKey = canonicalizeIdNumber(user.seqId || user.seq_id || user.id_number || user.srcId);
+    if (!idKey || !seenIds.has(idKey)) {
+      result.push(user);
+    }
+  });
+
+  // Add unique UID users
+  seenUids.forEach((user) => {
+    const idKey = canonicalizeIdNumber(user.seqId || user.seq_id || user.id_number || user.srcId);
+    const email = String(user.email || "").trim().toLowerCase();
+    const emailKey = `email:${email}`;
+    if ((!idKey || !seenIds.has(idKey)) && (!email || !seenEmails.has(emailKey))) {
+      result.push(user);
+    }
+  });
+
+  return result;
 }

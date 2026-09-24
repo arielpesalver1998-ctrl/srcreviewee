@@ -71,7 +71,7 @@ export function AreaPerformanceCircle({
     <button
       type="button"
       onClick={onClick}
-      className={`group relative flex min-h-[320px] w-full flex-col items-center justify-between rounded-[24px] border bg-white p-5 text-center shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md dark:bg-slate-900 cursor-pointer overflow-hidden ${
+      className={`group relative flex min-h-[250px] sm:min-h-[300px] w-full flex-col items-center justify-between rounded-2xl sm:rounded-[24px] border bg-white p-3.5 sm:p-5 text-center shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md dark:bg-slate-900 cursor-pointer overflow-hidden ${
         isSelected
           ? "border-teal-500 ring-2 ring-teal-500 dark:border-teal-400"
           : "border-slate-200/90 dark:border-slate-800"
@@ -82,17 +82,17 @@ export function AreaPerformanceCircle({
         <p className="text-xs font-black uppercase tracking-wider text-teal-700 dark:text-teal-400">
           {displaySubject}
         </p>
-        <h4 className="mt-1 text-[10px] font-black uppercase text-slate-800 dark:text-slate-200 leading-tight tracking-tight h-7 flex items-center justify-center text-center max-w-[130px] px-1">
+        <h4 className="mt-1 text-[10px] font-black uppercase text-slate-800 dark:text-slate-200 leading-tight tracking-tight h-6 sm:h-7 flex items-center justify-center text-center max-w-[130px] px-1 truncate sm:whitespace-normal">
           {config.fullName}
         </h4>
       </div>
 
       {/* Circle Progress Gauge */}
-      <div className="relative mt-4 mb-2 h-36 w-36 flex items-center justify-center shrink-0">
+      <div className="relative mt-2 sm:mt-4 mb-1 sm:mb-2 h-28 w-28 sm:h-36 sm:w-36 flex items-center justify-center shrink-0">
         {/* Watermark in center background */}
         <span
           aria-hidden="true"
-          className="absolute inset-0 flex items-center justify-center pointer-events-none select-none text-5xl font-black text-slate-900/[0.08] dark:text-white/[0.08] tracking-wider uppercase z-0"
+          className="absolute inset-0 flex items-center justify-center pointer-events-none select-none text-3xl sm:text-5xl font-black text-slate-900/[0.08] dark:text-white/[0.08] tracking-wider uppercase z-0"
         >
           {displaySubject}
         </span>
@@ -128,7 +128,7 @@ export function AreaPerformanceCircle({
 
         {/* Percentage Text */}
         <div className="absolute inset-0 flex items-center justify-center z-10">
-          <span className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+          <span className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white">
             {safePercentage.toFixed(2)}%
           </span>
         </div>
@@ -136,16 +136,16 @@ export function AreaPerformanceCircle({
 
       {/* Status & Eval Count */}
       <div className="flex flex-col items-center w-full">
-        <p className={`text-sm font-black leading-tight ${statusColorClass}`}>
+        <p className={`text-xs sm:text-sm font-black leading-tight ${statusColorClass}`}>
           {performance.label}
         </p>
-        <p className="mt-1 text-xs font-semibold text-slate-400 dark:text-slate-500">
+        <p className="mt-0.5 sm:mt-1 text-[11px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500">
           {evalCountLabel}
         </p>
       </div>
 
       {/* Action link */}
-      <div className="mt-3 text-xs font-bold text-teal-700 hover:text-teal-800 dark:text-teal-400 transition-colors flex items-center gap-1">
+      <div className="mt-2 sm:mt-3 text-[11px] sm:text-xs font-bold text-teal-700 hover:text-teal-800 dark:text-teal-400 transition-colors flex items-center gap-1">
         View Breakdown →
       </div>
     </button>

@@ -170,6 +170,7 @@ export function PortalLayout({
   seqId,
   idNumber,
   photoURL,
+  headerRightExtra,
   children,
 }: {
   title: string;
@@ -187,6 +188,7 @@ export function PortalLayout({
   seqId?: string;
   idNumber?: string | null;
   photoURL?: string | null;
+  headerRightExtra?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -292,7 +294,7 @@ export function PortalLayout({
   const initials = getInitials(roleDetail);
 
   return (
-    <div className="h-[100dvh] w-full bg-[#F8FAFC] text-slate-900 overflow-hidden relative">
+    <div className="h-full w-full bg-[#F8FAFC] text-slate-900 overflow-hidden relative">
       <div className="flex h-full w-full overflow-hidden bg-[#F8FAFC]">
         {/* Desktop Sidebar */}
         <DesktopSidebar
@@ -312,37 +314,53 @@ export function PortalLayout({
           {/* Top Mobile/Desktop Header */}
           <header className="sticky top-0 z-40 flex h-auto min-h-[64px] items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur-md lg:h-20 lg:px-8 shrink-0">
             {/* Mobile Left */}
-            <div className="flex items-center gap-3 lg:hidden min-w-0 flex-1">
+            <div className="flex items-center gap-2.5 sm:gap-3 lg:hidden min-w-0 flex-1">
               <button
                 onClick={() => setIsMobileSidebarOpen(true)}
                 aria-label="Open navigation menu"
                 aria-expanded={isMobileSidebarOpen}
                 aria-controls="mobile-sidebar"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-900"
+                className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <Menu size={20} />
               </button>
+              {role === "Reviewee" && (
+                <UserAvatar 
+                  photoURL={photoURL} 
+                  altText={roleDetail || role} 
+                  size={32} 
+                  className="h-8 w-8 shrink-0 rounded-full border border-slate-100 bg-white shadow-sm" 
+                />
+              )}
               <div className="flex flex-col min-w-0">
-                <h1 className="truncate text-sm font-bold tracking-tight">{title}</h1>
-                {role === "Reviewee" && seqId && (
-                  <span className="truncate text-xs font-medium text-slate-500 mt-0.5">ID: {seqId}</span>
+                <h1 className="truncate text-xs sm:text-sm font-bold tracking-tight text-slate-900">{title}</h1>
+                {role === "Reviewee" && (
+                  <span className="font-mono font-bold text-slate-500 text-[11px] sm:text-xs whitespace-nowrap">
+                    ID: {idNumber || seqId || 'No ID'}
+                  </span>
                 )}
               </div>
             </div>
 
             {/* Desktop Left */}
             <div className="hidden lg:block">
-               <h1 className="text-2xl font-black tracking-tight">{title}</h1>
-               {role === "Reviewee" && seqId && (
-                 <div className="text-sm font-bold text-slate-500 mt-1">ID: {seqId}</div>
+               <h1 className="text-2xl font-black tracking-tight text-slate-900">{title}</h1>
+               {role === "Reviewee" && (seqId || idNumber) && (
+                 <div className="text-sm font-bold text-slate-500 mt-1 font-mono">ID: {idNumber || seqId}</div>
                )}
                <div className="text-sm font-medium text-slate-500">{subtitle}</div>
             </div>
 
             {/* Right Actions */}
-            <div className="flex items-center gap-2 lg:gap-4 shrink-0">
-              <div className="hidden items-center gap-2 rounded-2xl bg-slate-100 px-4 py-2 lg:flex">
-                <CalendarDays size={16} className="text-slate-400" />
+            <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 shrink-0">
+              {headerRightExtra && (
+                <div className="flex items-center gap-1 sm:gap-2">
+                  {headerRightExtra}
+                </div>
+              )}
+
+              <div className="hidden items-center gap-2 rounded-2xl bg-slate-100 px-3.5 py-1.5 lg:flex">
+                <CalendarDays size={15} className="text-slate-400" />
                 <span className="text-xs font-black text-slate-600">{today}</span>
               </div>
 
@@ -359,7 +377,7 @@ export function PortalLayout({
                   onMouseLeave={cancelPressTimer}
                   onClick={handleMessengerClick}
                   onContextMenu={handleMessengerContextMenu}
-                  className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors select-none"
+                  className="relative flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors select-none"
                   title="Open Messenger (Long press or right-click to edit link)"
                 >
                   <MessengerIcon className="w-5 h-5 pointer-events-none" />
@@ -383,8 +401,8 @@ export function PortalLayout({
                   <NotificationBell notifications={notifications} db={db} />
                 ) : (
                   <>
-                    <button className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100">
-                      <Bell size={20} />
+                    <button className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 cursor-pointer">
+                      <Bell size={18} />
                     </button>
                     {notificationCount > 0 && (
                       <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white ring-4 ring-white">
@@ -395,7 +413,15 @@ export function PortalLayout({
                 )}
               </div>
 
-              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-1 pr-3 lg:p-1.5 lg:pr-4">
+              <div 
+                onClick={() => {
+                  if (navItems.some(n => n.key === 'profile') || footerItems?.some(f => f.key === 'profile')) {
+                    onTabChange('profile');
+                  }
+                }}
+                className="flex items-center gap-2 sm:gap-3 rounded-2xl border border-slate-200 bg-white p-1 pr-2 sm:pr-3 lg:p-1.5 lg:pr-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                title="View Profile"
+              >
                 <UserAvatar 
                   photoURL={photoURL} 
                   altText={roleDetail || role} 
@@ -403,7 +429,7 @@ export function PortalLayout({
                   className="h-8 w-8 lg:h-9 lg:w-9 rounded-xl object-cover border border-slate-100 bg-white shadow-sm" 
                 />
                 <div className="hidden lg:block">
-                  <p className="text-xs font-black leading-none uppercase">
+                  <p className="text-xs font-black leading-none uppercase text-slate-900">
                     {roleDetail || role}
                   </p>
                   <p className="mt-1 text-[10px] font-bold text-slate-400">
@@ -415,7 +441,7 @@ export function PortalLayout({
           </header>
 
           {/* Main Content Area */}
-          <main className="flex-1 overflow-y-auto scroll-smooth px-4 pb-[calc(92px+env(safe-area-inset-bottom))] pt-6 lg:px-8 lg:pb-12">
+          <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scroll-smooth px-3 sm:px-4 lg:px-8 pt-4 sm:pt-6 pb-[calc(112px+env(safe-area-inset-bottom))] lg:pb-12 custom-scrollbar">
             {activeTab === 'notifications' ? (
               <div className="space-y-4 max-w-2xl mx-auto">
                 <h2 className="text-xl font-black text-slate-900">Notifications</h2>
@@ -523,24 +549,32 @@ export function PortalLayout({
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-2.5">
+                <div 
+                  onClick={() => {
+                    setIsMobileSidebarOpen(false);
+                    if (navItems.some(n => n.key === 'profile') || footerItems?.some(f => f.key === 'profile')) {
+                      onTabChange('profile');
+                    }
+                  }}
+                  className="mt-4 flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/70 p-2.5 cursor-pointer hover:bg-slate-100/80 transition-colors"
+                >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <UserAvatar 
                       photoURL={photoURL} 
                       altText={roleDetail || role} 
-                      size={28} 
-                      className="h-7 w-7 rounded-full border border-white shadow-sm" 
+                      size={32} 
+                      className="h-8 w-8 rounded-full border border-white shadow-sm shrink-0" 
                     />
                     <div className="min-w-0">
-                      <p className="truncate text-[10px] font-black text-slate-900 uppercase">
+                      <p className="truncate text-[11px] font-black text-slate-900 uppercase">
                         {roleDetail || role}
                       </p>
-                      <p className="text-[9px] font-bold text-slate-400">
-                        {idNumber || 'No ID'}
+                      <p className="text-[10px] font-bold text-slate-400 whitespace-nowrap">
+                        {idNumber || (role === "Admin" ? "XIR POGS" : role === "Staff" ? "Staff Member" : 'No ID')}
                       </p>
                     </div>
                   </div>
-                  <ChevronDown size={12} className="text-slate-400" />
+                  <ChevronDown size={14} className="text-slate-400 shrink-0" />
                 </div>
               </div>
 

@@ -87,7 +87,7 @@ export function parseScores(data: any): ScoreRecord[] {
              percentage: (numScore / totalItems) * 100,
              result: getResultLabel((numScore / totalItems) * 100),
              source: 'AssessmentRecord',
-             scoreFolderId: entry.scoreFolderId || 'main',
+             scoreFolderId: entry.scoreFolderId || entry.folderId || 'main',
              publicationStatus: entry.publicationStatus || 'published'
            });
         }
@@ -118,7 +118,7 @@ export function parseScores(data: any): ScoreRecord[] {
              percentage: (numScore / totalItems) * 100,
              result: getResultLabel((numScore / totalItems) * 100),
              source: 'ScoresByDate',
-             scoreFolderId: entry.scoreFolderId || 'main',
+             scoreFolderId: entry.scoreFolderId || entry.folderId || 'main',
              publicationStatus: entry.publicationStatus || 'published'
            });
         }

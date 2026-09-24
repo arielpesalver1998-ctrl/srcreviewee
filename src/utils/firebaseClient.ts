@@ -257,10 +257,7 @@ export async function clientEnroll(
     console.warn("Could not determine dynamic next sequence number on client:", e);
   }
 
-  let assignedRole = "Reviewee";
-  if (uLastName === "PESALVER" && uFirstName === "ARIEL") {
-    assignedRole = "Admin";
-  }
+  const assignedRole = "Reviewee";
 
   await withTimeout(runTransaction(firestoreDb, async (transaction) => {
     const counterRef = doc(firestoreDb, "counters", counterId);

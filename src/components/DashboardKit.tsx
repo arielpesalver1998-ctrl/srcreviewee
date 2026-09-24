@@ -34,20 +34,20 @@ export function StatCard({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-[1.5rem] border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
+      className="rounded-2xl sm:rounded-[1.5rem] border border-slate-200 bg-white p-3 sm:p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md w-full"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold text-slate-600">{label}</p>
-          <h3 className="mt-2 text-3xl font-black text-slate-900">
-            {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : value}
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] sm:text-xs font-bold text-slate-600 truncate">{label}</p>
+          <h3 className="mt-1 sm:mt-2 text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 truncate">
+            {loading ? <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin" /> : value}
           </h3>
-          <p className="mt-1 text-xs font-semibold text-emerald-600">
+          <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-xs font-semibold text-emerald-600 truncate">
             {subtitle || "+2.31% vs last month"}
           </p>
         </div>
 
-        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${toneClasses[tone]}`}>
+        <div className={`flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl ${toneClasses[tone]}`}>
           {icon}
         </div>
       </div>

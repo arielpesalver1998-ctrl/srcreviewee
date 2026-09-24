@@ -17,6 +17,12 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 html {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -29,10 +35,11 @@ body {
   font-family: var(--font-sans);
   font-feature-settings: "cv02", "cv04", "ss01", "zero" 0;
   text-rendering: optimizeLegibility;
-  min-height: 100vh;
+  min-height: 100%;
   margin: 0;
   padding: 0;
   overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 html.dark body,

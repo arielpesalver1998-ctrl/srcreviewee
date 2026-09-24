@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Users, Search, Shield, UserCheck, Mail, Building2, MapPin, CheckCircle2, Filter, Wrench, Trash2 } from 'lucide-react';
+import { Users, Search, Shield, UserCheck, Mail, Building2, MapPin, CheckCircle2, Filter, Wrench, Trash2, Download, Loader2 } from 'lucide-react';
 import { getUserRole } from '../utils/roleUtils';
 import { normalizeNameForComparison } from '../utils/nameNormalization';
-import { resolveCanonicalUserIdentity, isValidUserRecord, formatMiddleName, compareUsersAlphabetically, formatFormalName } from '../services/userIdentityResolver';
+import { resolveCanonicalUserIdentity, isValidUserRecord, formatMiddleName, compareUsersAlphabetically, formatFormalName, deduplicateUsersByIdNumber } from '../services/userIdentityResolver';
 import { SimpleTable } from './DashboardKit';
 import { RepairEmailModal } from './RepairEmailModal';
 import { UserAvatar } from './UserAvatar';
+import { downloadRegisteredUsersCsv } from '../utils/exportUsersCsv';
 
 interface AllUsersDirectoryProps {
   users: any[];
@@ -13,19 +14,56 @@ interface AllUsersDirectoryProps {
   onEditUser: (user: any) => void;
   onDeleteUser?: (user: any) => void;
   currentUser?: any;
+  onDownloadCsv?: () => void;
+  isExportingCsv?: boolean;
+  initialRoleFilter?: string;
 }
 
-export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({ users, loading, onEditUser, onDeleteUser, currentUser }) => {
+export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({ 
+  users, 
+  loading, 
+  onEditUser, 
+  onDeleteUser, 
+  currentUser,
+  onDownloadCsv,
+  isExportingCsv = false,
+  initialRoleFilter = 'all',
+}) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [roleFilter, setRoleFilter] = useState<string>(initialRoleFilter);
   const [isRepairModalOpen, setIsRepairModalOpen] = useState(false);
+  const [internalExporting, setInternalExporting] = useState(false);
 
   const loggedInRole = getUserRole(currentUser);
   const isStaffLoggedIn = loggedInRole === 'Staff';
   const isAdminLoggedIn = loggedInRole === 'Admin';
 
+  const isDownloading = isExportingCsv || internalExporting;
+
+  const handleDownloadClick = async () => {
+    if (onDownloadCsv) {
+      onDownloadCsv();
+      return;
+    }
+    setInternalExporting(true);
+    try {
+      const res = await downloadRegisteredUsersCsv(users);
+      if (!res.success) {
+        alert(res.error || 'Failed to download users CSV.');
+      }
+    } catch (err: any) {
+      alert(`Error downloading CSV: ${err?.message || err}`);
+    } finally {
+      setInternalExporting(false);
+    }
+  };
+
+  const uniqueUsers = useMemo(() => {
+    return deduplicateUsersByIdNumber(users);
+  }, [users]);
+
   const filteredUsers = useMemo(() => {
-    const list = users.filter((u) => {
+    const list = uniqueUsers.filter((u) => {
       const status = String(u.accountStatus || u.status || '').toLowerCase();
       if (status === 'merged' || status === 'deleted' || u.isDeleted || u.deleted) {
         return false;
@@ -49,7 +87,7 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({ users, loa
     });
 
     return [...list].sort(compareUsersAlphabetically);
-  }, [users, searchQuery, roleFilter]);
+  }, [uniqueUsers, searchQuery, roleFilter]);
 
   const rows = filteredUsers.map((u) => {
     const role = getUserRole(u);
@@ -85,7 +123,7 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({ users, loa
             <Users className="text-teal-600" size={22} /> All System Users Directory
           </h2>
           <p className="text-xs text-slate-500 font-medium mt-1">
-            Viewing all registered accounts across Admin, Staff, and Reviewee roles ({users.length} total users).
+            Viewing all registered accounts across Admin, Staff, and Reviewee roles ({uniqueUsers.length} total unique users &bull; 1 user per ID number).
           </p>
         </div>
 
@@ -127,6 +165,20 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({ users, loa
               <Wrench size={14} /> Repair Email Links
             </button>
           )}
+
+          <button
+            onClick={handleDownloadClick}
+            disabled={isDownloading}
+            className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white border border-teal-500 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 shadow-sm disabled:opacity-50"
+            title="Download all registered users as a CSV spreadsheet"
+          >
+            {isDownloading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Download size={14} />
+            )}
+            <span>Download CSV</span>
+          </button>
         </div>
       </div>
 

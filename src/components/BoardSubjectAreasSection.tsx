@@ -24,18 +24,18 @@ export function BoardSubjectAreasSection({
   subtitle?: string;
 }) {
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm dark:bg-slate-900 dark:border-slate-800">
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <section className="rounded-2xl sm:rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6 shadow-sm dark:bg-slate-900 dark:border-slate-800">
+      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h2 className="text-xl font-black text-slate-900 dark:text-white">
+          <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
             {title}
           </h2>
-          <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+          <p className="mt-0.5 sm:mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
             {subtitle}
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {onViewAll && (
             <button
               onClick={onViewAll}
@@ -44,16 +44,16 @@ export function BoardSubjectAreasSection({
               View All →
             </button>
           )}
-          <span className="rounded-full bg-teal-50 px-3.5 py-1.5 text-xs font-bold text-teal-700 dark:bg-teal-950/50 dark:text-teal-300 border border-teal-100/60 dark:border-teal-900">
+          <span className="rounded-full bg-teal-50 px-2.5 sm:px-3.5 py-1 sm:py-1.5 text-[11px] sm:text-xs font-bold text-teal-700 dark:bg-teal-950/50 dark:text-teal-300 border border-teal-100/60 dark:border-teal-900">
             {areas.length} Board Areas
           </span>
         </div>
       </div>
 
-      <div className="overflow-x-auto pb-3">
-        <div className="flex gap-4 min-w-max lg:grid lg:grid-cols-6 lg:w-full">
+      <div className="overflow-x-auto pb-2 sm:pb-3">
+        <div className="flex gap-3 sm:gap-4 min-w-max lg:grid lg:grid-cols-6 lg:w-full">
           {areas.map((item) => (
-            <div key={item.key || item.area} className="w-[180px] shrink-0 lg:w-auto">
+            <div key={item.key || item.area} className="w-[150px] sm:w-[180px] shrink-0 lg:w-auto">
               <AreaPerformanceCircle
                 subject={item.area}
                 percentage={item.percent || 0}

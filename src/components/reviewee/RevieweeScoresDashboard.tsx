@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { FileText, TrendingUp, Award, CheckCircle2, Check, User, Folder } from 'lucide-react';
+import { FileText, TrendingUp, Award, CheckCircle2, Check, User, Folder, FolderSync } from 'lucide-react';
 import { RevieweeData, ScoreFolder } from '../../types';
 import { ScoreRecord, parseScores } from '../../utils/scoreParser';
 import { normalizeScoreCategory, normalizeScoreSubject } from '../../utils/scoreFieldResolver';
@@ -7,6 +7,8 @@ import { useScoreFolders } from '../../hooks/useScoreFolders';
 import { isRevieweeInFolderScope, isFolderMatching } from '../../utils/folderScope';
 import { BoardMajorAreaCard } from './BoardMajorAreaCard';
 import { isFolderVisibleToReviewee } from '../../constants/folderTypes';
+import { AdminFolderSyncViewer } from '../AdminFolderSyncViewer';
+import { isAdminLike } from '../../utils/roleUtils';
 
 const SUBJECTS_BY_AREA: Record<string, { code: string; title: string }[]> = {
   "CLJ": [
@@ -114,6 +116,7 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
     return validFolders;
   }, [folders, currentUser]);
   const [selectedFolder, setSelectedFolder] = useState<ScoreFolder | null>(null);
+  const [isFolderSyncModalOpen, setIsFolderSyncModalOpen] = useState(false);
   
   // Set default folder when folders load or reset if selectedFolder is deleted
   React.useEffect(() => {
@@ -294,7 +297,7 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
         </div>
 
         {/* Published Folder Selector */}
-        <div className="flex gap-2 overflow-x-auto pb-2">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2">
           {publishedFolders.map(folder => (
             <button
               key={folder.id}
@@ -312,6 +315,15 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
           {publishedFolders.length === 0 && (
             <div className="text-xs font-bold text-slate-400 italic py-2">No published folders available</div>
           )}
+
+          <button
+            onClick={() => setIsFolderSyncModalOpen(true)}
+            className="ml-auto px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 shrink-0 shadow-sm cursor-pointer"
+            title="Verify and synchronize folders created by admin"
+          >
+            <FolderSync size={14} className="text-teal-600" />
+            <span>Admin Folder Sync</span>
+          </button>
         </div>
 
         {/* Top Summary Cards */}
@@ -546,6 +558,18 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
           </div>
         </div>
       </div>
+
+      {isFolderSyncModalOpen && (
+        <div className="fixed inset-0 z-[100000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-5xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[92vh] flex flex-col animate-in zoom-in-95">
+            <AdminFolderSyncViewer
+              currentUser={currentUser}
+              isModal={true}
+              onClose={() => setIsFolderSyncModalOpen(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

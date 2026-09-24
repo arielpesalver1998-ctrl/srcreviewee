@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { firestoreDb } from '../utils/firebaseClient';
 import { logFirestoreError } from '../utils/firestoreErrorHandling';
+import { deduplicateUsersByIdNumber } from '../services/userIdentityResolver';
 
 export function useFirestoreUsers() {
   const [allUsers, setAllUsers] = useState<any[]>([]);
@@ -15,12 +16,13 @@ export function useFirestoreUsers() {
     const unsub = onSnapshot(
       q,
       (snapshot) => {
-        const users = snapshot.docs.map((doc) => ({
+        const rawUsers = snapshot.docs.map((doc) => ({
           uid: doc.id,
           ...doc.data(),
         }));
 
-        setAllUsers(users);
+        const uniqueUsers = deduplicateUsersByIdNumber(rawUsers);
+        setAllUsers(uniqueUsers);
         setLoading(false);
         setError(null);
       },

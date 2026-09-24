@@ -76,6 +76,50 @@
         }
       },
       "required": ["token", "createdAt"]
+    },
+    "scoreFolder": {
+      "title": "Score Folder",
+      "description": "Represents an examination batch or coaching period folder created by admin",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique folder identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the score folder"
+        },
+        "folderType": {
+          "type": "string",
+          "description": "Type of folder: phase_1, phase_2, marathon, final_coaching, or custom"
+        },
+        "publicationStatus": {
+          "type": "string",
+          "description": "Publication state: published, hidden, or draft"
+        },
+        "isArchived": {
+          "type": "boolean",
+          "description": "Whether the folder is archived"
+        },
+        "isDeleted": {
+          "type": "boolean",
+          "description": "Whether the folder is soft deleted"
+        },
+        "schoolScope": {
+          "type": "string",
+          "description": "School accessibility scope: all or selected"
+        },
+        "branchScope": {
+          "type": "string",
+          "description": "Branch accessibility scope: all or selected"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "Admin UID or email who created the folder"
+        }
+      },
+      "required": ["name", "folderType"]
     }
   },
   "firestore": {
@@ -102,6 +146,18 @@
         "$ref": "#/entities/config"
       },
       "description": "Global application configuration"
+    },
+    "scoreFolders": {
+      "schema": {
+        "$ref": "#/entities/scoreFolder"
+      },
+      "description": "Score folders collection (camelCase) created by admin"
+    },
+    "score_folders": {
+      "schema": {
+        "$ref": "#/entities/scoreFolder"
+      },
+      "description": "Score folders collection (snake_case) created by admin"
     }
   }
 }

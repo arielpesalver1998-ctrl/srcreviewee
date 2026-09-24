@@ -47,8 +47,10 @@ export interface ScoreFolderNormalized {
   isDeleted: boolean;
   schoolScope?: string;
   selectedSchoolIds?: string[];
+  selectedSchoolNames?: string[];
   branchScope?: string;
   selectedBranchIds?: string[];
+  selectedBranchNames?: string[];
   createdAt?: any;
   updatedAt?: any;
   [key: string]: any;
@@ -69,13 +71,21 @@ export function normalizeScoreFolder(rawFolder: any): ScoreFolderNormalized {
 
   const id = rawFolder.id || '';
   const name = rawFolder.name || '';
-  const folderType = normalizeFolderType(rawFolder.folderType ?? rawFolder.type ?? 'custom');
+  const folderType = normalizeFolderType(rawFolder.folderType ?? rawFolder.folder_type ?? rawFolder.type ?? 'custom');
+  const isPublishedTruth = rawFolder.isPublished === true || String(rawFolder.isPublished).toLowerCase() === 'true';
   const publicationStatus = normalizeFolderPublicationStatus(
-    rawFolder.publicationStatus ?? rawFolder.status ?? (rawFolder.isPublished ? 'published' : 'hidden')
+    rawFolder.publicationStatus ?? rawFolder.status ?? (isPublishedTruth ? 'published' : 'hidden')
   );
   
-  const isArchived = rawFolder.isArchived === true || String(rawFolder.isArchived) === 'true';
-  const isDeleted = rawFolder.isDeleted === true || String(rawFolder.isDeleted) === 'true';
+  const isArchived = rawFolder.isArchived === true || String(rawFolder.isArchived).toLowerCase() === 'true';
+  const isDeleted = rawFolder.isDeleted === true || String(rawFolder.isDeleted).toLowerCase() === 'true';
+
+  const ensureArray = (val: any) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') return val.split(',').map(s => s.trim()).filter(Boolean);
+    return [val];
+  };
 
   return {
     ...rawFolder,
@@ -87,9 +97,11 @@ export function normalizeScoreFolder(rawFolder: any): ScoreFolderNormalized {
     isArchived,
     isDeleted,
     schoolScope: rawFolder.schoolScope,
-    selectedSchoolIds: rawFolder.selectedSchoolIds,
+    selectedSchoolIds: ensureArray(rawFolder.selectedSchoolIds),
+    selectedSchoolNames: ensureArray(rawFolder.selectedSchoolNames),
     branchScope: rawFolder.branchScope,
-    selectedBranchIds: rawFolder.selectedBranchIds,
+    selectedBranchIds: ensureArray(rawFolder.selectedBranchIds),
+    selectedBranchNames: ensureArray(rawFolder.selectedBranchNames),
     createdAt: rawFolder.createdAt,
     updatedAt: rawFolder.updatedAt,
   };

@@ -4,10 +4,13 @@ import { AlertCircle, Bug, WifiOff } from 'lucide-react';
 import { AuthPage } from './components/AuthPage';
 import { SuccessPage } from './components/SuccessPage';
 import { RevieweePortal } from './components/RevieweePortal';
+import { AdminDashboard } from './components/AdminDashboard';
+import { StaffDashboard } from './components/StaffDashboard';
 import { FirebaseDiagnosticPanel } from './components/FirebaseDiagnosticPanel';
 import { logout } from './utils/auth';
 import { firebaseConfigured, getFirebaseConfig } from './utils/firebase';
 import { useBrowserOnlineStatus } from './hooks/useBrowserOnlineStatus';
+import { getUserRole, isAdmin, isStaff, isReviewee } from './utils/roleUtils';
 import type { RevieweeData } from './types';
 import { requestNotificationPermission } from './utils/fcm';
 
@@ -17,6 +20,16 @@ export default function App() {
   const [view, setView] = useState<'form' | 'success' | 'portal'>('form');
   const [enrollmentData, setEnrollmentData] = useState<RevieweeData | null>(null);
   const [lastGeneratedId, setLastGeneratedId] = useState<string | null>(null);
+  const [portalMode, setPortalMode] = useState<'admin' | 'staff' | 'reviewee'>(() => {
+    const normalizedPath = decodeURIComponent(window.location.pathname).toLowerCase();
+    if (normalizedPath.startsWith('/admin')) {
+      return 'admin';
+    }
+    if (normalizedPath.startsWith('/staff')) {
+      return 'staff';
+    }
+    return (localStorage.getItem('user_portal_mode') as 'admin' | 'staff' | 'reviewee') || 'reviewee';
+  });
 
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
 
@@ -42,13 +55,39 @@ export default function App() {
         return;
       }
 
-      // REVIEWEE PORTAL ACCESS ONLY
-      if (
-        normalizedPath.startsWith('/admin') || 
-        normalizedPath.startsWith('/staff')
-      ) {
-        window.history.replaceState({}, '', '/reviewee/dashboard');
-        return;
+      // AUTHENTICATED USER ACCESS AND ROUTING
+      const userRole = getUserRole(enrollmentData);
+      const isUserAdmin = userRole === 'Admin';
+      const isUserStaff = userRole === 'Staff';
+
+      if (normalizedPath.startsWith('/admin')) {
+        if (isUserAdmin) {
+          setPortalMode('admin');
+          localStorage.setItem('user_portal_mode', 'admin');
+        } else if (isUserStaff) {
+          // Staff cannot access admin: redirect to staff dashboard
+          window.history.replaceState({}, '', '/staff/dashboard');
+          setPortalMode('staff');
+          localStorage.setItem('user_portal_mode', 'staff');
+        } else {
+          // Reviewee cannot access admin: strictly redirect to reviewee dashboard
+          window.history.replaceState({}, '', '/reviewee/dashboard');
+          setPortalMode('reviewee');
+          localStorage.setItem('user_portal_mode', 'reviewee');
+        }
+      } else if (normalizedPath.startsWith('/staff')) {
+        if (isUserAdmin || isUserStaff) {
+          setPortalMode('staff');
+          localStorage.setItem('user_portal_mode', 'staff');
+        } else {
+          // Reviewee cannot access staff: strictly redirect to reviewee dashboard
+          window.history.replaceState({}, '', '/reviewee/dashboard');
+          setPortalMode('reviewee');
+          localStorage.setItem('user_portal_mode', 'reviewee');
+        }
+      } else if (normalizedPath.startsWith('/reviewee')) {
+        setPortalMode('reviewee');
+        localStorage.setItem('user_portal_mode', 'reviewee');
       }
     };
 
@@ -60,6 +99,37 @@ export default function App() {
     };
   }, [enrollmentData]);
 
+  const handleSwitchToAdmin = React.useCallback(() => {
+    if (!isAdmin(enrollmentData)) {
+      setPortalMode('reviewee');
+      window.history.pushState({}, '', '/reviewee/dashboard');
+      return;
+    }
+    setPortalMode('admin');
+    localStorage.setItem('user_portal_mode', 'admin');
+    window.history.pushState({}, '', '/admin/dashboard');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [enrollmentData]);
+
+  const handleSwitchToStaff = React.useCallback(() => {
+    if (!isAdmin(enrollmentData) && !isStaff(enrollmentData)) {
+      setPortalMode('reviewee');
+      window.history.pushState({}, '', '/reviewee/dashboard');
+      return;
+    }
+    setPortalMode('staff');
+    localStorage.setItem('user_portal_mode', 'staff');
+    window.history.pushState({}, '', '/staff/dashboard');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [enrollmentData]);
+
+  const handleSwitchToReviewee = React.useCallback(() => {
+    setPortalMode('reviewee');
+    localStorage.setItem('user_portal_mode', 'reviewee');
+    window.history.pushState({}, '', '/reviewee/dashboard');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
   const handleSuccess = React.useCallback((data: RevieweeData) => {
     setEnrollmentData(data);
     if (data && (data.seqId || data.seq_id)) {
@@ -68,8 +138,46 @@ export default function App() {
     setView('portal');
 
     const currentPath = decodeURIComponent(window.location.pathname).toLowerCase();
-    if (currentPath === '/' || currentPath === '/login' || currentPath === '/signup') {
-      window.history.replaceState({}, '', '/reviewee/dashboard');
+    const userRole = getUserRole(data);
+    const isUserAdmin = userRole === 'Admin';
+    const isUserStaff = userRole === 'Staff';
+
+    if (currentPath.startsWith('/admin')) {
+      if (isUserAdmin) {
+        setPortalMode('admin');
+        localStorage.setItem('user_portal_mode', 'admin');
+      } else if (isUserStaff) {
+        window.history.replaceState({}, '', '/staff/dashboard');
+        setPortalMode('staff');
+        localStorage.setItem('user_portal_mode', 'staff');
+      } else {
+        window.history.replaceState({}, '', '/reviewee/dashboard');
+        setPortalMode('reviewee');
+        localStorage.setItem('user_portal_mode', 'reviewee');
+      }
+    } else if (currentPath.startsWith('/staff')) {
+      if (isUserAdmin || isUserStaff) {
+        setPortalMode('staff');
+        localStorage.setItem('user_portal_mode', 'staff');
+      } else {
+        window.history.replaceState({}, '', '/reviewee/dashboard');
+        setPortalMode('reviewee');
+        localStorage.setItem('user_portal_mode', 'reviewee');
+      }
+    } else if (currentPath === '/' || currentPath === '/login' || currentPath === '/signup') {
+      if (isUserAdmin) {
+        window.history.replaceState({}, '', '/admin/dashboard');
+        setPortalMode('admin');
+        localStorage.setItem('user_portal_mode', 'admin');
+      } else if (isUserStaff) {
+        window.history.replaceState({}, '', '/staff/dashboard');
+        setPortalMode('staff');
+        localStorage.setItem('user_portal_mode', 'staff');
+      } else {
+        window.history.replaceState({}, '', '/reviewee/dashboard');
+        setPortalMode('reviewee');
+        localStorage.setItem('user_portal_mode', 'reviewee');
+      }
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
@@ -190,7 +298,31 @@ export default function App() {
 
             {view === 'portal' && enrollmentData && (
               <div className="fixed inset-0 z-[100] w-full h-full bg-[#F8FAFC] dark:bg-[#020617] overflow-hidden animate-fade-in">
-                <RevieweePortal data={enrollmentData} onLogout={handleReset} />
+                {/* 1. ADMIN DASHBOARD: STRICTLY ACCESSIBLE BY ADMIN ONLY */}
+                {isAdmin(enrollmentData) && portalMode === 'admin' ? (
+                  <AdminDashboard
+                    currentUser={enrollmentData}
+                    onLogout={handleReset}
+                    onSwitchToReviewee={handleSwitchToReviewee}
+                    onSwitchToStaff={handleSwitchToStaff}
+                  />
+                ) : (isAdmin(enrollmentData) || isStaff(enrollmentData)) && portalMode === 'staff' ? (
+                  /* 2. STAFF DASHBOARD: ACCESSIBLE BY STAFF (AND ADMIN PREVIEW) */
+                  <StaffDashboard
+                    currentUser={enrollmentData}
+                    onLogout={handleReset}
+                    onSwitchToReviewee={handleSwitchToReviewee}
+                    onSwitchToAdmin={isAdmin(enrollmentData) ? handleSwitchToAdmin : undefined}
+                  />
+                ) : (
+                  /* 3. REVIEWEE DASHBOARD: FOR REVIEWEE STUDENTS ONLY */
+                  <RevieweePortal
+                    data={enrollmentData}
+                    onLogout={handleReset}
+                    onSwitchToAdmin={isAdmin(enrollmentData) ? handleSwitchToAdmin : undefined}
+                    onSwitchToStaff={isStaff(enrollmentData) ? handleSwitchToStaff : undefined}
+                  />
+                )}
               </div>
             )}
           </div>

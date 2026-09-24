@@ -182,20 +182,36 @@ export async function resolveAuthenticatedAccount(firebaseUser: User): Promise<A
 
     const batch = writeBatch(db);
 
-    // Update existing document
-    const existingRef = doc(db, "users", existingDocId);
-    batch.set(existingRef, updatePayload, { merge: true });
-
-    // Also mirror to users/{firebaseUser.uid} if different doc ID
+    // If existing document is different from firebaseUser.uid, write the consolidated account to users/{firebaseUser.uid} and mark the old unlinked doc as merged
     if (existingDocId !== firebaseUser.uid) {
       const authUserRef = doc(db, "users", firebaseUser.uid);
       const mergedFullDoc = {
         ...existingAccount,
         ...updatePayload,
-        canonicalDocId: existingDocId
+        uid: firebaseUser.uid,
+        authUid: firebaseUser.uid,
+        firebaseUid: firebaseUser.uid,
+        id: firebaseUser.uid,
+        doc_id: firebaseUser.uid,
+        canonicalDocId: firebaseUser.uid,
+        accountStatus: "active",
+        status: "active",
       };
       delete mergedFullDoc._ref;
       batch.set(authUserRef, mergedFullDoc, { merge: true });
+
+      // Mark the old unlinked document as merged so it never creates duplicate ID rows
+      const existingRef = doc(db, "users", existingDocId);
+      batch.set(existingRef, {
+        accountStatus: "merged",
+        status: "merged",
+        isDeleted: true,
+        mergedIntoUid: firebaseUser.uid,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    } else {
+      const existingRef = doc(db, "users", existingDocId);
+      batch.set(existingRef, updatePayload, { merge: true });
     }
 
     await batch.commit();
@@ -203,7 +219,8 @@ export async function resolveAuthenticatedAccount(firebaseUser: User): Promise<A
     const finalAccount = {
       ...existingAccount,
       ...updatePayload,
-      id: existingDocId
+      id: firebaseUser.uid,
+      uid: firebaseUser.uid,
     };
 
     return {

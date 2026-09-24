@@ -113,6 +113,16 @@ service cloud.firestore {
       allow create, update, delete: if isAdminLike();
     }
 
+    match /scoreFolders/{folderId} {
+      allow read: if isAdminLike() || (
+        isReviewee() &&
+        resource.data.publicationStatus == 'published' &&
+        resource.data.isArchived != true &&
+        isUserInFolderScope(resource.data)
+      );
+      allow create, update, delete: if isAdminLike();
+    }
+
     // Default
     match /{document=**} {
       allow read: if true;

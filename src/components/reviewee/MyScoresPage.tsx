@@ -116,15 +116,6 @@ export function MyScoresPage({ revieweeData, scores, gradeWeights = DEFAULT_GRAD
 
   const isDailyEvaluation = normalizeScoreCategory(selectedCategory) === 'dailyevaluation';
 
-  if (!isPreferencesReady || isRestoring) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 space-y-4">
-        <div className="w-10 h-10 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-sm font-bold text-slate-600">Restoring your last My Scores view…</p>
-      </div>
-    );
-  }
-
   // 1. Data computation for Daily Evaluation
   const dailyEvalData = useMemo(() => {
     if (!isDailyEvaluation) return null;
@@ -238,7 +229,7 @@ export function MyScoresPage({ revieweeData, scores, gradeWeights = DEFAULT_GRAD
       dateCols,
       scoresBySubjectAndDate,
     };
-  }, [isDailyEvaluation, selectedArea, scores, revieweeData]);
+  }, [isDailyEvaluation, selectedArea, filteredScores, revieweeData, selectedFolder]);
 
   // 2. Data computation for other categories
   const standardCategoryData = useMemo(() => {
@@ -307,7 +298,7 @@ export function MyScoresPage({ revieweeData, scores, gradeWeights = DEFAULT_GRAD
     });
 
     return { areaScores: computedAreaScores, tableRows, dates };
-  }, [isDailyEvaluation, selectedCategory, scores]);
+  }, [isDailyEvaluation, selectedCategory, filteredScores]);
 
   // Overall Board Subject Areas computation for top cards
   const boardSubjectAreaScores = useMemo(() => {
@@ -326,17 +317,26 @@ export function MyScoresPage({ revieweeData, scores, gradeWeights = DEFAULT_GRAD
     });
   }, [revieweeData, gradeWeights, selectedFolder]);
 
+  if (!isPreferencesReady || isRestoring) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 space-y-4">
+        <div className="w-10 h-10 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-sm font-bold text-slate-600">Restoring your last My Scores view…</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-8 p-6">
+    <div className="space-y-4 sm:space-y-6 lg:space-y-8 p-3 sm:p-5 lg:p-6">
       <div>
-        <h1 className="text-2xl font-black text-slate-900">My Scores</h1>
-        <p className="text-sm text-slate-600">
+        <h1 className="text-xl sm:text-2xl font-black text-slate-900">My Scores</h1>
+        <p className="text-xs sm:text-sm text-slate-600">
           View your scores by board subject area, examination category, and evaluation dates.
         </p>
         {selectedFolder && (
-          <div className="mt-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Currently Viewing:</span>
-            <div className="text-sm font-black text-teal-700 bg-teal-50 px-3 py-1 rounded-full inline-block ml-2 border border-teal-100">
+          <div className="mt-2.5 sm:mt-4">
+            <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Currently Viewing:</span>
+            <div className="text-xs sm:text-sm font-black text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full inline-block ml-2 border border-teal-100">
               {selectedFolder.name}
             </div>
           </div>
@@ -344,12 +344,12 @@ export function MyScoresPage({ revieweeData, scores, gradeWeights = DEFAULT_GRAD
       </div>
 
       {/* Published Folder Selector */}
-      <div className="flex gap-2 overflow-x-auto pb-2">
+      <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
         {publishedFolders.map(folder => (
           <button
             key={folder.id}
             onClick={() => handleSelectFolder(folder)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+            className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
               selectedFolder?.id === folder.id
                 ? 'bg-slate-900 text-white shadow-md'
                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
@@ -368,7 +368,7 @@ export function MyScoresPage({ revieweeData, scores, gradeWeights = DEFAULT_GRAD
         transition={{ duration: 0.3 }}
       >
         {/* Privacy Notice */}
-        <div className="bg-slate-100 rounded-2xl p-4 text-center mt-4">
+        <div className="bg-slate-100 rounded-2xl p-3 sm:p-4 text-center mt-2 sm:mt-4">
           <p className="text-xs font-semibold text-slate-500">
             “Only your Published scores from active score folders are visible to you.”
           </p>
@@ -381,16 +381,16 @@ export function MyScoresPage({ revieweeData, scores, gradeWeights = DEFAULT_GRAD
           onAreaClick={(area) => handleSelectArea(area)}
         />
 
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200 overflow-hidden mt-4">
           {/* Category Toolbar */}
-          <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
+          <div className="p-3.5 sm:p-5 lg:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+            <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 sm:pb-0 custom-scrollbar">
               {categories.map(cat => (
                 <button
                   key={cat}
                   type="button"
                   onClick={() => handleSelectCategory(cat)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                  className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
                     selectedCategory === cat
                       ? 'bg-teal-600 text-white shadow-sm'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -407,7 +407,7 @@ export function MyScoresPage({ revieweeData, scores, gradeWeights = DEFAULT_GRAD
           </div>
 
           {/* Table Content */}
-          <div className="p-6">
+          <div className="p-3 sm:p-5 lg:p-6">
             {isDailyEvaluation && dailyEvalData ? (
               <DailyEvaluationSubjectTable
                 areaCode={selectedArea as MajorAreaCode}
