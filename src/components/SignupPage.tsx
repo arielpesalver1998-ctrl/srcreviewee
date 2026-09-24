@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Mail, Lock, Eye, EyeOff, Loader2, GraduationCap, MapPin, ChevronDown, Check, ArrowRight, Sun, Moon, UserCheck, CheckCircle2, Info, ExternalLink } from 'lucide-react';
+import { User, Mail, Lock, Eye, EyeOff, Loader2, GraduationCap, MapPin, ChevronDown, Check, ArrowRight, ArrowLeft, Sun, Moon, UserCheck, CheckCircle2, Info, ExternalLink, ShieldCheck } from 'lucide-react';
 import { auth, googleSignIn } from '../utils/auth';
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { linkOrCreateUserRecord, findMatchingUnlinkedCandidates } from '../utils/idGenerator';
@@ -205,6 +205,9 @@ export function SignupPage({ onSuccess, onToggleLogin }: SignupPageProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // Multi-step Registration flow state
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -374,6 +377,10 @@ export function SignupPage({ onSuccess, onToggleLogin }: SignupPageProps) {
     [passwordRequirements]
   );
 
+  const isStep1Valid = useMemo(() => firstName.trim().length >= 2 && lastName.trim().length >= 2, [firstName, lastName]);
+  const isStep2Valid = useMemo(() => Boolean((selectedSchool || schoolInput).trim()) && Boolean((selectedBranch || branchInput).trim()), [selectedSchool, schoolInput, selectedBranch, branchInput]);
+  const isStep3Valid = useMemo(() => Boolean(email.trim().includes('@') && email.trim().includes('.')) && allRequirementsMet && !emailDuplicateError, [email, allRequirementsMet, emailDuplicateError]);
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading || googleLoading) return;
@@ -539,513 +546,708 @@ export function SignupPage({ onSuccess, onToggleLogin }: SignupPageProps) {
 
       {/* Form */}
       <form onSubmit={handleSignup} className="space-y-5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* First Name */}
-          <div className="space-y-1">
-            <label className={labelBase}>
-              <User size={11} className="text-teal-600 dark:text-[#00B8A9]" /> First Name
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="ARIEL"
-              value={firstName}
-              autoCapitalize="characters"
-              autoCorrect="off"
-              spellCheck={false}
-              onChange={(e) => setFirstName(e.target.value.toUpperCase())}
-              className={`${inputBase} uppercase font-semibold`}
-            />
-          </div>
-
-          {/* Middle Name */}
-          <div className="space-y-1">
-            <label className={labelBase}>
-              Middle Name <span className="text-slate-400 dark:text-slate-500 font-normal lowercase">(optional)</span>
-            </label>
-            <input
-              type="text"
-              placeholder="ORCIA"
-              value={middleName}
-              autoCapitalize="characters"
-              autoCorrect="off"
-              spellCheck={false}
-              onChange={(e) => setMiddleName(e.target.value.toUpperCase())}
-              className={`${inputBase} uppercase font-semibold`}
-            />
-          </div>
-        </div>
-
-        {/* Last Name */}
-        <div className="space-y-1">
-          <label className={labelBase}>
-            <User size={11} className="text-teal-600 dark:text-[#00B8A9]" /> Last Name
-          </label>
-          <input
-            type="text"
-            required
-            placeholder="PESALVER"
-            value={lastName}
-            autoCapitalize="characters"
-            autoCorrect="off"
-            spellCheck={false}
-            onChange={(e) => setLastName(e.target.value.toUpperCase())}
-            className={`${inputBase} uppercase font-semibold`}
-          />
-        </div>
-
-        {/* Feedback Alert Prompt for Existing ID Match */}
-        <AnimatePresence>
-          {matchCandidate && userMatchChoice === 'pending' && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: -5 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: -5 }}
-              className="bg-amber-50/90 dark:bg-amber-950/60 border-2 border-amber-400 dark:border-amber-600 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3 my-2"
-            >
-              <div className="flex items-start gap-3">
-                <div className="bg-amber-500 text-white p-2.5 rounded-xl shrink-0 mt-0.5 shadow-md">
-                  <UserCheck className="w-5 h-5" />
-                </div>
-                <div className="space-y-1.5 flex-1 min-w-0">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-200 bg-amber-200/80 dark:bg-amber-900/80 px-2.5 py-0.5 rounded-full">
-                      Existing Record Found
-                    </span>
-                    <span className="text-xs font-mono font-extrabold text-amber-900 dark:text-amber-100 bg-amber-200 dark:bg-amber-900 px-2.5 py-0.5 rounded-lg border border-amber-300 dark:border-amber-700">
-                      ID: {matchCandidate.seq_id || matchCandidate.seqId || matchCandidate.srcId || matchCandidate.id_number || "Unassigned"}
-                    </span>
-                  </div>
-                  
-                  <p className="text-xs text-amber-950 dark:text-amber-100 font-bold leading-relaxed">
-                    An existing profile with ID Number <strong className="font-extrabold text-amber-700 dark:text-amber-300 font-mono underline">{matchCandidate.seq_id || matchCandidate.seqId || matchCandidate.id_number}</strong> was found under:
-                  </p>
-                  
-                  <div className="bg-white/80 dark:bg-amber-900/40 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800 text-xs space-y-0.5">
-                    <div className="font-black text-amber-900 dark:text-amber-100">
-                      👤 {(matchCandidate.first_name || matchCandidate.firstName || "").toUpperCase()} {(matchCandidate.last_name || matchCandidate.lastName || "").toUpperCase()}
-                    </div>
-                    {(matchCandidate.school_name || matchCandidate.schoolName) && (
-                      <div className="text-[11px] text-amber-800 dark:text-amber-200 font-medium">
-                        🏫 {matchCandidate.school_name || matchCandidate.schoolName}
-                      </div>
-                    )}
-                    {(matchCandidate.review_branch || matchCandidate.reviewBranch) && (
-                      <div className="text-[11px] text-amber-800 dark:text-amber-200 font-medium">
-                        📍 Branch: {matchCandidate.review_branch || matchCandidate.reviewBranch}
-                      </div>
-                    )}
-                  </div>
-
-                  <p className="text-[11px] text-amber-800 dark:text-amber-300 font-semibold pt-1">
-                    <strong>Is this you?</strong> If yes, your account will adopt this ID Number and all your previous scores will be linked immediately so you can see them.
-                  </p>
-                </div>
+        {/* Visual Step-Progress Indicator */}
+        <div className="bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-3 shadow-xs">
+          {/* Header Row */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-teal-600 dark:text-[#00B8A9] bg-teal-50 dark:bg-teal-950/50 px-2.5 py-0.5 rounded-full border border-teal-200/80 dark:border-teal-800">
+                  Step {currentStep} of 3
+                </span>
+                <span className="text-xs font-black text-slate-800 dark:text-white">
+                  {currentStep === 1 && "Personal Information"}
+                  {currentStep === 2 && "School & Review Branch"}
+                  {currentStep === 3 && "Account & Security"}
+                </span>
               </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                {currentStep === 1 && "Enter your legal full name as registered with Samaritan Review Center"}
+                {currentStep === 2 && "Select your college or university and review branch location"}
+                {currentStep === 3 && "Set up your email and password credentials for sign in"}
+              </p>
+            </div>
 
-              <div className="flex flex-col sm:flex-row items-center gap-2 pt-2 border-t border-amber-200/80 dark:border-amber-800">
+            <div className="text-right shrink-0">
+              <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border ${
+                currentStep === 3
+                  ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+              }`}>
+                {currentStep === 1 && "2 steps left"}
+                {currentStep === 2 && "1 step left"}
+                {currentStep === 3 && "Final step!"}
+              </span>
+            </div>
+          </div>
+
+          {/* Progress Line */}
+          <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden relative">
+            <div
+              className="h-full bg-gradient-to-r from-teal-500 via-[#00B8A9] to-emerald-500 rounded-full transition-all duration-500 ease-out shadow-xs"
+              style={{
+                width: currentStep === 1 ? '33.3%' : currentStep === 2 ? '66.6%' : '100%',
+              }}
+            />
+          </div>
+
+          {/* Interactive Stepper Nodes */}
+          <div className="grid grid-cols-3 gap-2 pt-1">
+            {[
+              { number: 1, label: "Personal", icon: User },
+              { number: 2, label: "School", icon: GraduationCap },
+              { number: 3, label: "Security", icon: ShieldCheck },
+            ].map((s) => {
+              const isActive = currentStep === s.number;
+              const isCompleted = currentStep > s.number;
+              const IconComp = s.icon;
+
+              return (
                 <button
+                  key={s.number}
                   type="button"
                   onClick={() => {
-                    setUserMatchChoice('yes');
-                    if (matchCandidate.school_name || matchCandidate.schoolName) {
-                      const sc = matchCandidate.school_name || matchCandidate.schoolName;
-                      setSelectedSchool(sc);
-                      setSchoolInput(sc);
-                    }
-                    if (matchCandidate.review_branch || matchCandidate.reviewBranch) {
-                      const br = matchCandidate.review_branch || matchCandidate.reviewBranch;
-                      setSelectedBranch(br);
-                      setBranchInput(br);
+                    if (s.number < currentStep || (s.number === 2 && isStep1Valid) || (s.number === 3 && isStep1Valid && isStep2Valid)) {
+                      setCurrentStep(s.number as 1 | 2 | 3);
                     }
                   }}
-                  className="w-full sm:flex-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black py-2.5 px-4 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  Yes, this is me (Use this ID & Load Scores)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setUserMatchChoice('no')}
-                  className="w-full sm:w-auto bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold py-2.5 px-4 rounded-xl border border-slate-300 dark:border-slate-700 transition-all cursor-pointer"
-                >
-                  No, create new ID
-                </button>
-              </div>
-            </motion.div>
-          )}
-
-          {matchCandidate && userMatchChoice === 'yes' && (
-            <motion.div
-              initial={{ opacity: 0, y: -5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-emerald-50/90 dark:bg-emerald-950/60 border-2 border-emerald-400 dark:border-emerald-600 rounded-2xl p-4 shadow-md space-y-2.5 my-2"
-            >
-              <div className="flex items-center justify-between gap-2 border-b border-emerald-200 dark:border-emerald-800/80 pb-2">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span className="text-xs font-bold text-emerald-900 dark:text-emerald-100">
-                    Linked to ID: <strong className="font-mono font-black text-emerald-700 dark:text-emerald-300">{matchCandidate.seq_id || matchCandidate.seqId || matchCandidate.id_number}</strong>
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setUserMatchChoice('pending')}
-                  className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300 hover:underline cursor-pointer"
-                >
-                  Change
-                </button>
-              </div>
-
-              <div className="space-y-1 text-xs text-emerald-950 dark:text-emerald-100 font-medium leading-relaxed">
-                <p>
-                  To open and confirm this account, log in using the registered email address:
-                </p>
-                <div 
-                  onClick={() => openGmailApp(matchCandidate.email || matchCandidate.email_lower || email || '')}
-                  title="Click to Open Gmail App"
-                  className="bg-white dark:bg-emerald-900/40 p-2.5 rounded-xl border border-emerald-300 dark:border-emerald-700 font-mono font-extrabold text-xs text-emerald-900 dark:text-emerald-100 flex items-center gap-2 cursor-pointer hover:border-emerald-500 transition-all shadow-sm active:scale-[0.99]"
-                >
-                  <Mail size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>{maskEmail(matchCandidate.email || matchCandidate.email_lower || email || '')}</span>
-                </div>
-                <p className="text-[11px] text-emerald-800 dark:text-emerald-200 font-semibold pt-0.5">
-                  We sent an email to confirm login. Please check your inbox or sign in using this email address to proceed.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => openGmailApp(matchCandidate.email || matchCandidate.email_lower || email || '')}
-                  className="mt-2 w-full py-2 px-3 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 hover:border-emerald-500 rounded-xl font-bold text-xs text-emerald-950 dark:text-emerald-100 flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all group active:scale-[0.99]"
-                >
-                  <GmailIcon className="w-4 h-4 shrink-0" />
-                  <span>Open Gmail App</span>
-                  <ExternalLink size={12} className="text-emerald-600 dark:text-emerald-400 group-hover:text-emerald-800 dark:group-hover:text-emerald-200" />
-                </button>
-              </div>
-            </motion.div>
-          )}
-
-          {matchCandidate && userMatchChoice === 'no' && (
-            <motion.div
-              initial={{ opacity: 0, y: -5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-300 font-medium my-2"
-            >
-              <div className="flex items-center gap-2">
-                <Info className="w-4 h-4 text-slate-500 shrink-0" />
-                <span>Creating a new ID Number for this account.</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setUserMatchChoice('pending')}
-                className="text-[10px] uppercase font-bold text-slate-500 hover:underline cursor-pointer"
-              >
-                Change
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* School Name Dropdown */}
-        <div className="space-y-1 relative">
-          <label className={labelBase}>
-            <GraduationCap size={12} className="text-teal-600 dark:text-[#00B8A9]" /> School Name
-          </label>
-          
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search or enter school name..."
-              value={selectedSchool ? selectedSchool : schoolInput}
-              onChange={(e) => {
-                setSelectedSchool('');
-                setSchoolInput(e.target.value);
-                setShowSchoolDropdown(true);
-              }}
-              onFocus={() => setShowSchoolDropdown(true)}
-              className={inputBase + " pr-10"}
-            />
-            <button
-              type="button"
-              onClick={() => setShowSchoolDropdown(!showSchoolDropdown)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-            >
-              <ChevronDown size={15} />
-            </button>
-          </div>
-
-          <AnimatePresence>
-            {showSchoolDropdown && (
-              <motion.div
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 5 }}
-                className="absolute z-50 left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden"
-              >
-                {filteredSchools.length > 0 ? (
-                  filteredSchools.map((school, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => {
-                        setSelectedSchool(school);
-                        setSchoolInput('');
-                        setShowSchoolDropdown(false);
-                      }}
-                      className="w-full px-4 py-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 last:border-0"
-                    >
-                      <span>{school}</span>
-                      {selectedSchool === school && <Check size={14} className="text-teal-600 dark:text-[#00B8A9]" />}
-                    </button>
-                  ))
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowSchoolDropdown(false)}
-                    className="w-full px-4 py-2.5 text-left text-xs text-slate-500 dark:text-slate-400 italic"
-                  >
-                    No exact match. Your custom text will be saved.
-                  </button>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Review Branch Dropdown */}
-        <div className="space-y-1 relative">
-          <label className={labelBase}>
-            <MapPin size={12} className="text-teal-600 dark:text-[#00B8A9]" /> Review Branch
-          </label>
-          
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search or enter review branch..."
-              value={selectedBranch ? selectedBranch : branchInput}
-              onChange={(e) => {
-                setSelectedBranch('');
-                setBranchInput(e.target.value);
-                setShowBranchDropdown(true);
-              }}
-              onFocus={() => setShowBranchDropdown(true)}
-              className={inputBase + " pr-10"}
-            />
-            <button
-              type="button"
-              onClick={() => setShowBranchDropdown(!showBranchDropdown)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-            >
-              <ChevronDown size={15} />
-            </button>
-          </div>
-
-          <AnimatePresence>
-            {showBranchDropdown && (
-              <motion.div
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 5 }}
-                className="absolute z-40 left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden"
-              >
-                {filteredBranches.length > 0 ? (
-                  filteredBranches.map((branch, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => {
-                        setSelectedBranch(branch);
-                        setBranchInput('');
-                        setShowBranchDropdown(false);
-                      }}
-                      className="w-full px-4 py-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 last:border-0"
-                    >
-                      <span>{branch}</span>
-                      {selectedBranch === branch && <Check size={14} className="text-teal-600 dark:text-[#00B8A9]" />}
-                    </button>
-                  ))
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowBranchDropdown(false)}
-                    className="w-full px-4 py-2.5 text-left text-xs text-slate-500 dark:text-slate-400 italic"
-                  >
-                    No exact match. Your custom text will be saved.
-                  </button>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Email Address */}
-        <div className="space-y-1">
-          <label className={labelBase}>
-            <Mail size={11} className="text-teal-600 dark:text-[#00B8A9]" /> Email Address
-          </label>
-          <div className="relative">
-            <input
-              type="email"
-              required
-              placeholder="username@gmail.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value.toLowerCase())}
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              className={`${inputBase} ${emailDuplicateError ? '!border-rose-500 !bg-rose-50/30 dark:!bg-rose-950/20' : ''}`}
-            />
-            {checkingEmail && (
-              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-slate-400">
-                Checking...
-              </span>
-            )}
-          </div>
-          {emailDuplicateError ? (
-            <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400 ml-1 mt-1 flex items-center gap-1.5">
-              <span>⚠️</span> {emailDuplicateError}
-            </p>
-          ) : (
-            <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 ml-1 mt-0.5">
-              You may use any active email address. Verification will be sent to this email.
-            </p>
-          )}
-        </div>
-
-        {/* Passwords in 2 columns */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Password */}
-          <div className="space-y-1 relative">
-            <label className={labelBase}>
-              <Lock size={11} className="text-teal-600 dark:text-[#00B8A9]" /> Password
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                required
-                placeholder="Min. 8 chars"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={inputBase + " pr-11"}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#00B8A9]"
-              >
-                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
-            </div>
-          </div>
-
-          {/* Confirm Password */}
-          <div className="space-y-1 relative">
-            <label className={labelBase}>
-              <Lock size={11} className="text-teal-600 dark:text-[#00B8A9]" /> Confirm Password
-            </label>
-            <div className="relative">
-              <input
-                type={showConfirmPassword ? "text" : "password"}
-                required
-                placeholder="Repeat password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`${inputBase} pr-11 ${
-                  confirmPassword && password
-                    ? confirmPassword === password
-                      ? "border-emerald-500 focus:border-emerald-600 ring-1 ring-emerald-500/20"
-                      : "border-rose-400 focus:border-rose-500 ring-1 ring-rose-500/20"
-                    : ""
-                }`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#00B8A9]"
-              >
-                {showConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Confirm Password Status & Reminder Box */}
-        {password && (
-          <div className="text-[11px] font-bold">
-            {confirmPassword ? (
-              confirmPassword === password ? (
-                <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
-                  <CheckCircle2 size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>Passwords match perfectly.</span>
-                </div>
-              ) : (
-                <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 rounded-xl text-rose-800 dark:text-rose-200 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 animate-ping" />
-                  <span>Passwords do not match yet. Please retype identical password.</span>
-                </div>
-              )
-            ) : (
-              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-200 flex items-center gap-2">
-                <span className="text-amber-600 font-bold shrink-0">Reminder:</span>
-                <span>Please re-enter your password in "Confirm Password" to complete this step.</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Password Requirements & Step Checklist Box */}
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-900/60 space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-              Password Security Checklist
-            </p>
-            <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
-              allRequirementsMet 
-                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400"
-            }`}>
-              {passwordRequirements.filter(r => r.met).length} of {passwordRequirements.length} Met
-            </span>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            {passwordRequirements.map((req) => (
-              <div
-                key={req.text}
-                className={`flex items-center gap-2 text-[10px] font-bold transition-colors ${
-                  req.met
-                    ? "text-[#16A34A]"
-                    : "text-slate-400 dark:text-slate-500"
-                }`}
-              >
-                <span
-                  className={`flex h-4 w-4 items-center justify-center rounded-full border transition-all ${
-                    req.met
-                      ? "border-[#22C55E] bg-[#22C55E] text-white"
-                      : "border-slate-300 dark:border-slate-700 text-transparent"
+                  disabled={s.number > currentStep && ((s.number === 2 && !isStep1Valid) || (s.number === 3 && (!isStep1Valid || !isStep2Valid)))}
+                  className={`flex items-center gap-2 p-2 rounded-xl border text-left transition-all cursor-pointer disabled:cursor-not-allowed ${
+                    isActive
+                      ? 'bg-white dark:bg-slate-800 border-teal-500 dark:border-[#00B8A9] shadow-xs ring-2 ring-teal-500/20'
+                      : isCompleted
+                      ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 hover:border-emerald-400'
+                      : 'bg-transparent border-transparent opacity-50 hover:opacity-80'
                   }`}
                 >
-                  {req.met ? "✓" : ""}
-                </span>
-
-                <span>{req.text}</span>
-              </div>
-            ))}
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 transition-all ${
+                      isActive
+                        ? 'bg-teal-600 dark:bg-[#00B8A9] text-white'
+                        : isCompleted
+                        ? 'bg-emerald-500 text-white'
+                        : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    {isCompleted ? <Check size={12} strokeWidth={3} /> : <IconComp size={12} />}
+                  </div>
+                  <div className="min-w-0 flex-1 hidden sm:block">
+                    <p className={`text-[10px] font-black uppercase tracking-wider truncate ${
+                      isActive ? 'text-teal-700 dark:text-[#00B8A9]' : isCompleted ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400'
+                    }`}>
+                      {s.label}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={loading || googleLoading || !allRequirementsMet || Boolean(emailDuplicateError)}
-          className={pillButton}
-        >
-          {loading ? (
-            <Loader2 className="mx-auto h-5 w-5 animate-spin" />
-          ) : (
-            "CREATE ACCOUNT"
-          )}
-        </button>
+        {/* STEP 1: PERSONAL INFORMATION */}
+        {currentStep === 1 && (
+          <motion.div
+            key="step-1"
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 10 }}
+            className="space-y-4"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* First Name */}
+              <div className="space-y-1">
+                <label className={labelBase}>
+                  <User size={11} className="text-teal-600 dark:text-[#00B8A9]" /> First Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="ARIEL"
+                  value={firstName}
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  onChange={(e) => setFirstName(e.target.value.toUpperCase())}
+                  className={`${inputBase} uppercase font-semibold`}
+                />
+              </div>
+
+              {/* Middle Name */}
+              <div className="space-y-1">
+                <label className={labelBase}>
+                  Middle Name <span className="text-slate-400 dark:text-slate-500 font-normal lowercase">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="ORCIA"
+                  value={middleName}
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  onChange={(e) => setMiddleName(e.target.value.toUpperCase())}
+                  className={`${inputBase} uppercase font-semibold`}
+                />
+              </div>
+            </div>
+
+            {/* Last Name */}
+            <div className="space-y-1">
+              <label className={labelBase}>
+                <User size={11} className="text-teal-600 dark:text-[#00B8A9]" /> Last Name
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="PESALVER"
+                value={lastName}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                onChange={(e) => setLastName(e.target.value.toUpperCase())}
+                className={`${inputBase} uppercase font-semibold`}
+              />
+            </div>
+
+            {/* Feedback Alert Prompt for Existing ID Match */}
+            <AnimatePresence>
+              {matchCandidate && userMatchChoice === 'pending' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: -5 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: -5 }}
+                  className="bg-amber-50/90 dark:bg-amber-950/60 border-2 border-amber-400 dark:border-amber-600 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3 my-2"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="bg-amber-500 text-white p-2.5 rounded-xl shrink-0 mt-0.5 shadow-md">
+                      <UserCheck className="w-5 h-5" />
+                    </div>
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-200 bg-amber-200/80 dark:bg-amber-900/80 px-2.5 py-0.5 rounded-full">
+                          Existing Record Found
+                        </span>
+                        <span className="text-xs font-mono font-extrabold text-amber-900 dark:text-amber-100 bg-amber-200 dark:bg-amber-900 px-2.5 py-0.5 rounded-lg border border-amber-300 dark:border-amber-700">
+                          ID: {matchCandidate.seq_id || matchCandidate.seqId || matchCandidate.srcId || matchCandidate.id_number || "Unassigned"}
+                        </span>
+                      </div>
+                      
+                      <p className="text-xs text-amber-950 dark:text-amber-100 font-bold leading-relaxed">
+                        An existing profile with ID Number <strong className="font-extrabold text-amber-700 dark:text-amber-300 font-mono underline">{matchCandidate.seq_id || matchCandidate.seqId || matchCandidate.id_number}</strong> was found under:
+                      </p>
+                      
+                      <div className="bg-white/80 dark:bg-amber-900/40 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800 text-xs space-y-0.5">
+                        <div className="font-black text-amber-900 dark:text-amber-100">
+                          👤 {(matchCandidate.first_name || matchCandidate.firstName || "").toUpperCase()} {(matchCandidate.last_name || matchCandidate.lastName || "").toUpperCase()}
+                        </div>
+                        {(matchCandidate.school_name || matchCandidate.schoolName) && (
+                          <div className="text-[11px] text-amber-800 dark:text-amber-200 font-medium">
+                            🏫 {matchCandidate.school_name || matchCandidate.schoolName}
+                          </div>
+                        )}
+                        {(matchCandidate.review_branch || matchCandidate.reviewBranch) && (
+                          <div className="text-[11px] text-amber-800 dark:text-amber-200 font-medium">
+                            📍 Branch: {matchCandidate.review_branch || matchCandidate.reviewBranch}
+                          </div>
+                        )}
+                      </div>
+
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300 font-semibold pt-1">
+                        <strong>Is this you?</strong> If yes, your account will adopt this ID Number and all your previous scores will be linked immediately so you can see them.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-2 pt-2 border-t border-amber-200/80 dark:border-amber-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUserMatchChoice('yes');
+                        if (matchCandidate.school_name || matchCandidate.schoolName) {
+                          const sc = matchCandidate.school_name || matchCandidate.schoolName;
+                          setSelectedSchool(sc);
+                          setSchoolInput(sc);
+                        }
+                        if (matchCandidate.review_branch || matchCandidate.reviewBranch) {
+                          const br = matchCandidate.review_branch || matchCandidate.reviewBranch;
+                          setSelectedBranch(br);
+                          setBranchInput(br);
+                        }
+                      }}
+                      className="w-full sm:flex-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black py-2.5 px-4 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Yes, this is me (Use this ID & Load Scores)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUserMatchChoice('no')}
+                      className="w-full sm:w-auto bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold py-2.5 px-4 rounded-xl border border-slate-300 dark:border-slate-700 transition-all cursor-pointer"
+                    >
+                      No, create new ID
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {matchCandidate && userMatchChoice === 'yes' && (
+                <motion.div
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-emerald-50/90 dark:bg-emerald-950/60 border-2 border-emerald-400 dark:border-emerald-600 rounded-2xl p-4 shadow-md space-y-2.5 my-2"
+                >
+                  <div className="flex items-center justify-between gap-2 border-b border-emerald-200 dark:border-emerald-800/80 pb-2">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span className="text-xs font-bold text-emerald-900 dark:text-emerald-100">
+                        Linked to ID: <strong className="font-mono font-black text-emerald-700 dark:text-emerald-300">{matchCandidate.seq_id || matchCandidate.seqId || matchCandidate.id_number}</strong>
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setUserMatchChoice('pending')}
+                      className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300 hover:underline cursor-pointer"
+                    >
+                      Change
+                    </button>
+                  </div>
+
+                  <div className="space-y-1 text-xs text-emerald-950 dark:text-emerald-100 font-medium leading-relaxed">
+                    <p>
+                      To open and confirm this account, log in using the registered email address:
+                    </p>
+                    <div 
+                      onClick={() => openGmailApp(matchCandidate.email || matchCandidate.email_lower || email || '')}
+                      title="Click to Open Gmail App"
+                      className="bg-white dark:bg-emerald-900/40 p-2.5 rounded-xl border border-emerald-300 dark:border-emerald-700 font-mono font-extrabold text-xs text-emerald-900 dark:text-emerald-100 flex items-center gap-2 cursor-pointer hover:border-emerald-500 transition-all shadow-sm active:scale-[0.99]"
+                    >
+                      <Mail size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>{maskEmail(matchCandidate.email || matchCandidate.email_lower || email || '')}</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-800 dark:text-emerald-200 font-semibold pt-0.5">
+                      We sent an email to confirm login. Please check your inbox or sign in using this email address to proceed.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => openGmailApp(matchCandidate.email || matchCandidate.email_lower || email || '')}
+                      className="mt-2 w-full py-2 px-3 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 hover:border-emerald-500 rounded-xl font-bold text-xs text-emerald-950 dark:text-emerald-100 flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all group active:scale-[0.99]"
+                    >
+                      <GmailIcon className="w-4 h-4 shrink-0" />
+                      <span>Open Gmail App</span>
+                      <ExternalLink size={12} className="text-emerald-600 dark:text-emerald-400 group-hover:text-emerald-800 dark:group-hover:text-emerald-200" />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {matchCandidate && userMatchChoice === 'no' && (
+                <motion.div
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-300 font-medium my-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <Info className="w-4 h-4 text-slate-500 shrink-0" />
+                    <span>Creating a new ID Number for this account.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUserMatchChoice('pending')}
+                    className="text-[10px] uppercase font-bold text-slate-500 hover:underline cursor-pointer"
+                  >
+                    Change
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Next Step Button for Step 1 */}
+            <button
+              type="button"
+              disabled={!isStep1Valid}
+              onClick={() => {
+                if (isStep1Valid) {
+                  setError(null);
+                  setCurrentStep(2);
+                } else {
+                  setError("Please enter both your First Name and Last Name to continue.");
+                }
+              }}
+              className={pillButton}
+            >
+              <span>Continue to School & Branch</span>
+              <ArrowRight size={16} />
+            </button>
+          </motion.div>
+        )}
+
+        {/* STEP 2: SCHOOL & REVIEW BRANCH */}
+        {currentStep === 2 && (
+          <motion.div
+            key="step-2"
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 10 }}
+            className="space-y-4"
+          >
+            {/* School Name Dropdown */}
+            <div className="space-y-1 relative">
+              <label className={labelBase}>
+                <GraduationCap size={12} className="text-teal-600 dark:text-[#00B8A9]" /> School Name
+              </label>
+              
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search or enter school name..."
+                  value={selectedSchool ? selectedSchool : schoolInput}
+                  onChange={(e) => {
+                    setSelectedSchool('');
+                    setSchoolInput(e.target.value);
+                    setShowSchoolDropdown(true);
+                  }}
+                  onFocus={() => setShowSchoolDropdown(true)}
+                  className={inputBase + " pr-10"}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSchoolDropdown(!showSchoolDropdown)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                >
+                  <ChevronDown size={15} />
+                </button>
+              </div>
+
+              <AnimatePresence>
+                {showSchoolDropdown && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 5 }}
+                    className="absolute z-50 left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden"
+                  >
+                    {filteredSchools.length > 0 ? (
+                      filteredSchools.map((school, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setSelectedSchool(school);
+                            setSchoolInput('');
+                            setShowSchoolDropdown(false);
+                          }}
+                          className="w-full px-4 py-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 last:border-0 cursor-pointer"
+                        >
+                          <span>{school}</span>
+                          {selectedSchool === school && <Check size={14} className="text-teal-600 dark:text-[#00B8A9]" />}
+                        </button>
+                      ))
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowSchoolDropdown(false)}
+                        className="w-full px-4 py-2.5 text-left text-xs text-slate-500 dark:text-slate-400 italic"
+                      >
+                        No exact match. Your custom text will be saved.
+                      </button>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Review Branch Dropdown */}
+            <div className="space-y-1 relative">
+              <label className={labelBase}>
+                <MapPin size={12} className="text-teal-600 dark:text-[#00B8A9]" /> Review Branch
+              </label>
+              
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search or enter review branch..."
+                  value={selectedBranch ? selectedBranch : branchInput}
+                  onChange={(e) => {
+                    setSelectedBranch('');
+                    setBranchInput(e.target.value);
+                    setShowBranchDropdown(true);
+                  }}
+                  onFocus={() => setShowBranchDropdown(true)}
+                  className={inputBase + " pr-10"}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowBranchDropdown(!showBranchDropdown)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                >
+                  <ChevronDown size={15} />
+                </button>
+              </div>
+
+              <AnimatePresence>
+                {showBranchDropdown && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 5 }}
+                    className="absolute z-40 left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden"
+                  >
+                    {filteredBranches.length > 0 ? (
+                      filteredBranches.map((branch, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setSelectedBranch(branch);
+                            setBranchInput('');
+                            setShowBranchDropdown(false);
+                          }}
+                          className="w-full px-4 py-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 last:border-0 cursor-pointer"
+                        >
+                          <span>{branch}</span>
+                          {selectedBranch === branch && <Check size={14} className="text-teal-600 dark:text-[#00B8A9]" />}
+                        </button>
+                      ))
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowBranchDropdown(false)}
+                        className="w-full px-4 py-2.5 text-left text-xs text-slate-500 dark:text-slate-400 italic"
+                      >
+                        No exact match. Your custom text will be saved.
+                      </button>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Navigation Buttons for Step 2 */}
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setCurrentStep(1);
+                }}
+                className="py-3 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-full font-extrabold text-xs uppercase transition-all cursor-pointer flex items-center justify-center gap-2 shrink-0"
+              >
+                <ArrowLeft size={15} />
+                <span>Back</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={!isStep2Valid}
+                onClick={() => {
+                  if (isStep2Valid) {
+                    setError(null);
+                    setCurrentStep(3);
+                  } else {
+                    setError("Please select or enter both your School Name and Review Branch.");
+                  }
+                }}
+                className={pillButton + " flex-1"}
+              >
+                <span>Continue to Account Security</span>
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* STEP 3: ACCOUNT CREDENTIALS & SECURITY */}
+        {currentStep === 3 && (
+          <motion.div
+            key="step-3"
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 10 }}
+            className="space-y-4"
+          >
+            {/* Email Address */}
+            <div className="space-y-1">
+              <label className={labelBase}>
+                <Mail size={11} className="text-teal-600 dark:text-[#00B8A9]" /> Email Address
+              </label>
+              <div className="relative">
+                <input
+                  type="email"
+                  required
+                  placeholder="username@gmail.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value.toLowerCase())}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className={`${inputBase} ${emailDuplicateError ? '!border-rose-500 !bg-rose-50/30 dark:!bg-rose-950/20' : ''}`}
+                />
+                {checkingEmail && (
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-slate-400">
+                    Checking...
+                  </span>
+                )}
+              </div>
+              {emailDuplicateError ? (
+                <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400 ml-1 mt-1 flex items-center gap-1.5">
+                  <span>⚠️</span> {emailDuplicateError}
+                </p>
+              ) : (
+                <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 ml-1 mt-0.5">
+                  You may use any active email address. Verification will be sent to this email.
+                </p>
+              )}
+            </div>
+
+            {/* Passwords in 2 columns */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Password */}
+              <div className="space-y-1 relative">
+                <label className={labelBase}>
+                  <Lock size={11} className="text-teal-600 dark:text-[#00B8A9]" /> Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    placeholder="Min. 8 chars"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className={inputBase + " pr-11"}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#00B8A9] cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm Password */}
+              <div className="space-y-1 relative">
+                <label className={labelBase}>
+                  <Lock size={11} className="text-teal-600 dark:text-[#00B8A9]" /> Confirm Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    required
+                    placeholder="Repeat password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className={`${inputBase} pr-11 ${
+                      confirmPassword && password
+                        ? confirmPassword === password
+                          ? "border-emerald-500 focus:border-emerald-600 ring-1 ring-emerald-500/20"
+                          : "border-rose-400 focus:border-rose-500 ring-1 ring-rose-500/20"
+                        : ""
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#00B8A9] cursor-pointer"
+                  >
+                    {showConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Confirm Password Status & Reminder Box */}
+            {password && (
+              <div className="text-[11px] font-bold">
+                {confirmPassword ? (
+                  confirmPassword === password ? (
+                    <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
+                      <CheckCircle2 size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>Passwords match perfectly.</span>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 rounded-xl text-rose-800 dark:text-rose-200 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 animate-ping" />
+                      <span>Passwords do not match yet. Please retype identical password.</span>
+                    </div>
+                  )
+                ) : (
+                  <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-200 flex items-center gap-2">
+                    <span className="text-amber-600 font-bold shrink-0">Reminder:</span>
+                    <span>Please re-enter your password in "Confirm Password" to complete this step.</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Password Requirements & Step Checklist Box */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-900/60 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                  Password Security Checklist
+                </p>
+                <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                  allRequirementsMet 
+                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                    : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400"
+                }`}>
+                  {passwordRequirements.filter(r => r.met).length} of {passwordRequirements.length} Met
+                </span>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                {passwordRequirements.map((req) => (
+                  <div
+                    key={req.text}
+                    className={`flex items-center gap-2 text-[10px] font-bold transition-colors ${
+                      req.met
+                        ? "text-[#16A34A]"
+                        : "text-slate-400 dark:text-slate-500"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-4 w-4 items-center justify-center rounded-full border transition-all ${
+                        req.met
+                          ? "border-[#22C55E] bg-[#22C55E] text-white"
+                          : "border-slate-300 dark:border-slate-700 text-transparent"
+                      }`}
+                    >
+                      {req.met ? "✓" : ""}
+                    </span>
+
+                    <span>{req.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Navigation Buttons for Step 3 */}
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setCurrentStep(2);
+                }}
+                className="py-3 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-full font-extrabold text-xs uppercase transition-all cursor-pointer flex items-center justify-center gap-2 shrink-0"
+              >
+                <ArrowLeft size={15} />
+                <span>Back</span>
+              </button>
+
+              <button
+                type="submit"
+                disabled={loading || googleLoading || !allRequirementsMet || Boolean(emailDuplicateError)}
+                className={pillButton + " flex-1"}
+              >
+                {loading ? (
+                  <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+                ) : (
+                  "CREATE ACCOUNT"
+                )}
+              </button>
+            </div>
+          </motion.div>
+        )}
       </form>
 
       {/* Switch to Login */}
