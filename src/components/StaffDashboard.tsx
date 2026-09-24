@@ -15,7 +15,8 @@ import {
   Search,
   CheckCircle2,
   AlertCircle,
-  User
+  User,
+  Building2
 } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { firestoreDb } from '../utils/firebaseClient';
@@ -36,7 +37,6 @@ import { deduplicateUsersByIdNumber } from '../services/userIdentityResolver';
 interface StaffDashboardProps {
   currentUser: any;
   onLogout: () => void;
-  onSwitchToReviewee: () => void;
   onSwitchToAdmin?: () => void;
 }
 
@@ -45,7 +45,6 @@ export type StaffTab = 'overview' | 'profile' | 'scores' | 'directory' | 'folder
 export const StaffDashboard: React.FC<StaffDashboardProps> = ({
   currentUser,
   onLogout,
-  onSwitchToReviewee,
   onSwitchToAdmin,
 }) => {
   const [activeTab, setActiveTab] = useState<StaffTab>(() => {
@@ -124,6 +123,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
         userRole: updatedData.role || 'Reviewee',
         seqId: cleanSeqId,
         seq_id: cleanSeqId,
+        status: updatedData.status || updatedData.accountStatus || 'active',
+        accountStatus: updatedData.status || updatedData.accountStatus || 'active',
         updatedAt: new Date().toISOString(),
       });
       setActionNotice(`Reviewee ${updatedData.firstName} ${updatedData.lastName} updated successfully.`);
@@ -171,31 +172,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
         db={firestoreDb}
         navItems={drawerNavItems}
         footerItems={bottomNavItems}
-        headerRightExtra={
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {onSwitchToAdmin && (
-              <button
-                onClick={onSwitchToAdmin}
-                className="flex h-8 sm:h-9 items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-[11px] sm:text-xs shadow-sm cursor-pointer transition-colors"
-                title="Switch to Admin Console"
-              >
-                <Shield size={13} />
-                <span className="hidden sm:inline">Admin Console</span>
-                <span className="sm:hidden">Admin</span>
-              </button>
-            )}
-
-            <button
-              onClick={onSwitchToReviewee}
-              className="flex h-8 sm:h-9 items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-[11px] sm:text-xs shadow-sm cursor-pointer transition-colors"
-              title="Preview Student / Reviewee View"
-            >
-              <Eye size={13} />
-              <span className="hidden sm:inline">Reviewee View</span>
-              <span className="sm:hidden">Student</span>
-            </button>
-          </div>
-        }
       >
         <div className="mx-auto max-w-7xl">
           {/* Status Notice */}
@@ -356,34 +332,39 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
                 </button>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-xs">
+                <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                      <th className="py-2.5 px-3">Student Name</th>
-                      <th className="py-2.5 px-3">ID Number</th>
-                      <th className="py-2.5 px-3">School</th>
-                      <th className="py-2.5 px-3">Branch</th>
-                      <th className="py-2.5 px-3 text-right">Action</th>
+                    <tr className="border-b border-slate-200 bg-slate-50/90 divide-x divide-slate-200 text-slate-500 font-black uppercase tracking-wider text-[10px]">
+                      <th className="py-2.5 px-3.5">Student Name</th>
+                      <th className="py-2.5 px-3.5">ID Number</th>
+                      <th className="py-2.5 px-3.5">School / University</th>
+                      <th className="py-2.5 px-3.5">Branch</th>
+                      <th className="py-2.5 px-3.5 text-center">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                  <tbody className="divide-y divide-slate-200/80 font-medium text-slate-700">
                     {metrics.recentReviewees.map((u: any) => {
                       const name = [u.first_name || u.firstName, u.last_name || u.lastName].filter(Boolean).join(' ') || u.displayName || u.email;
                       const seq = u.seq_id || u.seqId || u.id_number || '—';
                       return (
-                        <tr key={u.uid || u.id} className="hover:bg-slate-50/70 transition-colors">
-                          <td className="py-3 px-3 font-bold text-slate-900 flex items-center gap-2">
-                            <UserAvatar photoURL={u.photoURL || u.photo_url} altText={name} size={24} className="rounded-full" />
-                            <span>{name}</span>
+                        <tr key={u.uid || u.id} className="hover:bg-blue-50/20 divide-x divide-slate-200/70 transition-colors">
+                          <td className="py-3 px-3.5 font-bold text-slate-900 flex items-center gap-2 whitespace-nowrap">
+                            <UserAvatar photoURL={u.photoURL || u.photo_url} altText={name} size={24} className="rounded-full shrink-0" />
+                            <span className="whitespace-nowrap">{name}</span>
                           </td>
-                          <td className="py-3 px-3 font-mono font-bold text-slate-600">{seq}</td>
-                          <td className="py-3 px-3 text-slate-600 truncate max-w-[180px]">{u.school_name || u.schoolName || u.school || '—'}</td>
-                          <td className="py-3 px-3 text-slate-600">{u.review_branch || u.reviewBranch || u.branch || '—'}</td>
-                          <td className="py-3 px-3 text-right">
+                          <td className="py-3 px-3.5 font-mono font-bold text-slate-600">{seq}</td>
+                          <td className="py-3 px-3.5 text-slate-700">
+                            <div className="flex items-center gap-1.5 truncate max-w-[240px]" title={u.school_name || u.schoolName || u.school || '—'}>
+                              <Building2 size={12} className="text-slate-400 shrink-0" />
+                              <span className="truncate">{u.school_name || u.schoolName || u.school || '—'}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3.5 text-slate-600">{u.review_branch || u.reviewBranch || u.branch || '—'}</td>
+                          <td className="py-3 px-3.5 text-center">
                             <button
                               onClick={() => setEditingUser(u)}
-                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] rounded-lg transition-colors cursor-pointer"
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] rounded-lg transition-colors cursor-pointer border border-slate-200"
                             >
                               Edit Info
                             </button>

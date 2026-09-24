@@ -1,6 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GraduationCap, MapPin, Loader2, User, ChevronDown, Check, ArrowRight, AlertCircle, UserCheck, CheckCircle2, Info, Mail, ExternalLink } from 'lucide-react';
+import {
+  GraduationCap,
+  MapPin,
+  Loader2,
+  User,
+  ChevronDown,
+  Check,
+  ArrowRight,
+  ArrowLeft,
+  AlertCircle,
+  UserCheck,
+  CheckCircle2,
+  Info,
+  Mail,
+  ExternalLink,
+  Copy,
+  PartyPopper,
+  Home,
+  BarChart3,
+  TrendingUp,
+  ChevronRight,
+  Sparkles,
+  Clock,
+  Menu
+} from 'lucide-react';
 import { linkOrCreateUserRecord, findMatchingUnlinkedCandidates } from '../utils/idGenerator';
 import { auth, logout } from '../utils/auth';
 import { PortalLoading } from './PortalLoading';
@@ -50,6 +74,27 @@ const DEFAULT_BRANCHES = [
   "Online Review"
 ];
 
+const GoogleIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24">
+    <path
+      fill="#4285F4"
+      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+    />
+    <path
+      fill="#34A853"
+      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+    />
+    <path
+      fill="#FBBC05"
+      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+    />
+    <path
+      fill="#EA4335"
+      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+    />
+  </svg>
+);
+
 interface ProfileSetupProps {
   onCompleted: (data: any) => void;
   initialData?: {
@@ -59,10 +104,18 @@ interface ProfileSetupProps {
     email?: string;
     schoolName?: string;
     reviewBranch?: string;
+    accountStatus?: string;
+    seqId?: string;
+    seq_id?: string;
+    srcId?: string;
   };
 }
 
 export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
+  // Step state (1: Connect, 2: Profile, 3: ID, 4: Welcome)
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
+
+  // Form states
   const [firstName, setFirstName] = useState(initialData?.firstName || '');
   const [middleName, setMiddleName] = useState(initialData?.middleName || '');
   const [lastName, setLastName] = useState(initialData?.lastName || '');
@@ -79,6 +132,10 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
   const [branchSuggestions, setBranchSuggestions] = useState<string[]>([]);
   const [showBranchDropdown, setShowBranchDropdown] = useState(false);
 
+  // Saved record from step 2 submission
+  const [savedUserData, setSavedUserData] = useState<any | null>(null);
+  const [copiedId, setCopiedId] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
 
@@ -86,6 +143,8 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
   const [matchCandidate, setMatchCandidate] = useState<any | null>(null);
   const [checkingMatch, setCheckingMatch] = useState(false);
   const [userMatchChoice, setUserMatchChoice] = useState<'pending' | 'yes' | 'no'>('pending');
+
+  const userEmail = auth.currentUser?.email || initialData?.email || 'reviewee@gmail.com';
 
   // Search for matching unlinked records when First Name & Last Name are provided
   useEffect(() => {
@@ -136,10 +195,9 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
   // Fetch school list suggestions on mount or from API
   useEffect(() => {
     fetch('/api/schools')
-      .then(res => res.ok ? res.json() : null)
+      .then(res => (res.ok ? res.json() : null))
       .then(data => {
         if (data && data.schools) {
-          // merge and deduplicate
           const merged = Array.from(new Set([...DEFAULT_SCHOOLS, ...data.schools]));
           setSchoolSuggestions(merged);
         } else {
@@ -163,7 +221,7 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
     ? branchSuggestions
     : branchSuggestions.filter(b => b.toLowerCase().includes(branchInput.toLowerCase()));
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleStep2Submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
     
@@ -174,7 +232,7 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
 
     const finalSchool = selectedSchool || schoolInput.trim();
     if (!finalSchool) {
-      setError({ title: "School Name Required", message: "Please select or enter your School Name." });
+      setError({ title: "School Required", message: "Please select or enter your School / University." });
       return;
     }
 
@@ -206,7 +264,9 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
         'google'
       );
 
-      onCompleted(res);
+      setSavedUserData(res);
+      // Advance to Step 3 (Reviewee ID Confirmation)
+      setCurrentStep(3);
     } catch (err: any) {
       console.error("Profile Setup Error:", err);
       setError(getFriendlyErrorMessage(err));
@@ -215,418 +275,657 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
     }
   };
 
+  const handleCopyId = () => {
+    const idToCopy = savedUserData?.seqId || savedUserData?.seq_id || 'SRC ID';
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(idToCopy);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2500);
+    }
+  };
+
+  const handleFinishOnboarding = () => {
+    onCompleted(savedUserData || { email: userEmail });
+  };
+
+  const stepsList = [
+    { number: 1, label: 'Connect' },
+    { number: 2, label: 'Profile' },
+    { number: 3, label: 'ID' },
+    { number: 4, label: 'Welcome' },
+  ];
+
   return (
     <>
       {loading && (
         <PortalLoading message="Activating Account…" subMessage="Please wait, Future RCrim." status="Activating Account…" />
       )}
-      <div className="bg-white/80 backdrop-blur-md border border-slate-100 rounded-3xl p-6 sm:p-10 shadow-2xl space-y-8 max-w-xl w-full mx-4">
-      <div className="space-y-2 text-center">
-        <h2 className="text-2xl font-extrabold tracking-tight text-slate-800">Complete Your Profile</h2>
-        <p className="text-slate-500 text-sm">
-          Please provide your enrollment details so we can link your review records and scores.
-        </p>
-      </div>
 
-      {error && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-red-50 border-l-4 border-red-500 p-4 rounded-2xl flex flex-col gap-3"
-        >
-          <div className="flex gap-2.5 items-start">
-            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <h4 className="font-bold text-red-800 text-sm">{error.title}</h4>
-              <p className="text-red-700 text-xs leading-relaxed">{error.message}</p>
-              {error.secondaryMessage && (
-                <p className="text-red-600/95 text-[11px] font-medium leading-relaxed mt-0.5">
-                  {error.secondaryMessage}
-                </p>
-              )}
-              {error.referenceId && (
-                <p className="text-red-400 text-[10px] uppercase tracking-wider font-semibold mt-1">
-                  Reference: {error.referenceId}
-                </p>
-              )}
-            </div>
-          </div>
+      <div className="min-h-screen bg-slate-50/60 flex flex-col items-center justify-start p-3 sm:p-6 w-full">
+        {/* Main Card Container with Mobile Frame Look */}
+        <div className="bg-white border border-slate-200/90 rounded-[2rem] shadow-xl max-w-md w-full overflow-hidden flex flex-col my-auto transition-all">
           
-          <div className="flex gap-2.5 mt-1 border-t border-red-200/50 pt-2.5">
-            <button
-              type="button"
-              onClick={() => setError(null)}
-              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 active:scale-95 text-white text-xs font-bold rounded-lg transition-all cursor-pointer"
-            >
-              Try Again
-            </button>
+          {/* Header Bar */}
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="font-black text-[#007C89] text-xl tracking-tight">SRC</span>
+              <span className="text-slate-300">|</span>
+              <span className="text-xs font-bold text-slate-800 tracking-tight leading-tight">
+                Samaritan<br />Review Center
+              </span>
+            </div>
+            
             <button
               type="button"
               onClick={async () => {
                 try {
                   await logout();
-                } catch (logoutErr) {
-                  console.error("Logout failed:", logoutErr);
+                } catch (e) {
+                  console.error(e);
                 }
               }}
-              className="px-3 py-1.5 bg-white hover:bg-red-100/50 border border-red-200 active:scale-95 text-red-700 text-xs font-bold rounded-lg transition-all cursor-pointer"
+              className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+              title="Sign Out"
+              aria-label="Sign Out"
             >
-              Back to Sign In
+              <Menu size={20} />
             </button>
           </div>
-        </motion.div>
-      )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* First Name */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-              <User size={12} className="text-teal-600" /> First Name
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Juan"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-teal-500 focus:bg-white rounded-2xl text-sm font-medium transition-all outline-none focus:ring-4 focus:ring-teal-500/10 text-slate-900"
-            />
-          </div>
-
-          {/* Middle Name */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Middle Name <span className="text-slate-400 font-normal lowercase">(optional)</span>
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Santos"
-              value={middleName}
-              onChange={(e) => setMiddleName(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-teal-500 focus:bg-white rounded-2xl text-sm font-medium transition-all outline-none focus:ring-4 focus:ring-teal-500/10 text-slate-900"
-            />
-          </div>
-        </div>
-
-        {/* Last Name */}
-        <div className="space-y-1">
-          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-            <User size={12} className="text-teal-600" /> Last Name
-          </label>
-          <input
-            type="text"
-            required
-            placeholder="e.g. Dela Cruz"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-teal-500 focus:bg-white rounded-2xl text-sm font-medium transition-all outline-none focus:ring-4 focus:ring-teal-500/10 text-slate-900"
-          />
-        </div>
-
-        {/* Feedback Alert Prompt for Existing ID Match */}
-        <AnimatePresence>
-          {matchCandidate && userMatchChoice === 'pending' && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: -5 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: -5 }}
-              className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3 my-2"
-            >
-              <div className="flex items-start gap-3">
-                <div className="bg-amber-500 text-white p-2.5 rounded-xl shrink-0 mt-0.5 shadow-md">
-                  <UserCheck className="w-5 h-5" />
-                </div>
-                <div className="space-y-1.5 flex-1 min-w-0">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 bg-amber-200 px-2.5 py-0.5 rounded-full">
-                      Existing Record Found
-                    </span>
-                    <span className="text-xs font-mono font-extrabold text-amber-900 bg-amber-200/80 px-2.5 py-0.5 rounded-lg border border-amber-300">
-                      ID: {matchCandidate.seq_id || matchCandidate.seqId || matchCandidate.srcId || matchCandidate.id_number || "Unassigned"}
-                    </span>
-                  </div>
-                  
-                  <p className="text-xs text-amber-950 font-bold leading-relaxed">
-                    An existing profile with ID Number <strong className="font-extrabold text-amber-700 font-mono underline">{matchCandidate.seq_id || matchCandidate.seqId || matchCandidate.id_number}</strong> was found under:
-                  </p>
-                  
-                  <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200 text-xs space-y-0.5">
-                    <div className="font-black text-amber-900">
-                      👤 {(matchCandidate.first_name || matchCandidate.firstName || "").toUpperCase()} {(matchCandidate.last_name || matchCandidate.lastName || "").toUpperCase()}
-                    </div>
-                    {(matchCandidate.school_name || matchCandidate.schoolName) && (
-                      <div className="text-[11px] text-amber-800 font-medium">
-                        🏫 {matchCandidate.school_name || matchCandidate.schoolName}
-                      </div>
-                    )}
-                    {(matchCandidate.review_branch || matchCandidate.reviewBranch) && (
-                      <div className="text-[11px] text-amber-800 font-medium">
-                        📍 Branch: {matchCandidate.review_branch || matchCandidate.reviewBranch}
-                      </div>
-                    )}
-                  </div>
-
-                  <p className="text-[11px] text-amber-800 font-semibold pt-1">
-                    <strong>Is this you?</strong> If yes, your account will adopt this ID Number and all your previous scores will be linked immediately so you can see them.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-center gap-2 pt-2 border-t border-amber-200">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUserMatchChoice('yes');
-                    if (matchCandidate.school_name || matchCandidate.schoolName) {
-                      const sc = matchCandidate.school_name || matchCandidate.schoolName;
-                      setSelectedSchool(sc);
-                      setSchoolInput(sc);
-                    }
-                    if (matchCandidate.review_branch || matchCandidate.reviewBranch) {
-                      const br = matchCandidate.review_branch || matchCandidate.reviewBranch;
-                      setSelectedBranch(br);
-                      setBranchInput(br);
-                    }
+          {/* Stepper Bar */}
+          <div className="px-5 pt-4 pb-3 border-b border-slate-50 bg-slate-50/40">
+            <div className="flex items-center justify-between relative max-w-xs mx-auto">
+              {/* Connecting Lines */}
+              <div className="absolute top-3.5 left-4 right-4 h-0.5 bg-slate-200 -z-0">
+                <div
+                  className="h-full bg-[#007C89] transition-all duration-300"
+                  style={{
+                    width:
+                      currentStep === 1 ? '0%' :
+                      currentStep === 2 ? '33%' :
+                      currentStep === 3 ? '66%' : '100%',
                   }}
-                  className="w-full sm:flex-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black py-2.5 px-4 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  Yes, this is me (Use this ID & Load Scores)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setUserMatchChoice('no')}
-                  className="w-full sm:w-auto bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold py-2.5 px-4 rounded-xl border border-slate-300 transition-all cursor-pointer"
-                >
-                  No, create new ID
-                </button>
-              </div>
-            </motion.div>
-          )}
-
-          {matchCandidate && userMatchChoice === 'yes' && (
-            <motion.div
-              initial={{ opacity: 0, y: -5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-4 shadow-md space-y-2.5 my-2"
-            >
-              <div className="flex items-center justify-between gap-2 border-b border-emerald-200/80 pb-2">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span className="text-xs font-bold text-emerald-900">
-                    Linked to ID: <strong className="font-mono font-black text-emerald-700">{matchCandidate.seq_id || matchCandidate.seqId || matchCandidate.id_number}</strong>
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setUserMatchChoice('pending')}
-                  className="text-[10px] uppercase font-bold text-emerald-700 hover:underline cursor-pointer"
-                >
-                  Change
-                </button>
+                />
               </div>
 
-              <div className="space-y-1 text-xs text-emerald-950 font-medium leading-relaxed">
-                <p>
-                  To open and confirm this account, log in using the registered email address:
-                </p>
-                <div className="bg-white p-2.5 rounded-xl border border-emerald-300 font-mono font-extrabold text-xs text-emerald-900 flex items-center gap-2">
-                  <Mail size={14} className="text-emerald-600 shrink-0" />
-                  <span>{maskEmail(matchCandidate.email || matchCandidate.email_lower || initialData?.email || auth.currentUser?.email || '')}</span>
-                </div>
-                <p className="text-[11px] text-emerald-800 font-semibold pt-0.5">
-                  We sent an email to confirm login. Please check your inbox or sign in using this email address to proceed.
-                </p>
-                <a
-                  href="https://mail.google.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-2 w-full py-2 px-3 bg-white border border-emerald-300 hover:border-emerald-500 rounded-xl font-bold text-xs text-emerald-950 flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all group"
-                >
-                  <GmailIcon className="w-4 h-4 shrink-0" />
-                  <span>Open Gmail Inbox</span>
-                  <ExternalLink size={12} className="text-emerald-600 group-hover:text-emerald-800" />
-                </a>
-              </div>
-            </motion.div>
-          )}
+              {stepsList.map((s) => {
+                const isActive = currentStep === s.number;
+                const isCompleted = currentStep > s.number;
 
-          {matchCandidate && userMatchChoice === 'no' && (
-            <motion.div
-              initial={{ opacity: 0, y: -5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-slate-50 border border-slate-200 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs text-slate-600 font-medium my-2"
-            >
-              <div className="flex items-center gap-2">
-                <Info className="w-4 h-4 text-slate-500 shrink-0" />
-                <span>Creating a new ID Number for this account.</span>
+                return (
+                  <div key={s.number} className="flex flex-col items-center gap-1 relative z-10">
+                    <div
+                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                        isActive
+                          ? 'bg-[#007C89] text-white ring-4 ring-teal-100 shadow-sm'
+                          : isCompleted
+                          ? 'bg-[#007C89] text-white shadow-xs'
+                          : 'bg-white border border-slate-300 text-slate-400'
+                      }`}
+                    >
+                      {isCompleted ? <Check size={14} strokeWidth={3} /> : s.number}
+                    </div>
+                    <span
+                      className={`text-[10px] tracking-tight transition-colors ${
+                        isActive
+                          ? 'text-[#007C89] font-black'
+                          : isCompleted
+                          ? 'text-[#007C89] font-bold'
+                          : 'text-slate-400 font-medium'
+                      }`}
+                    >
+                      {s.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Error Callout */}
+          {error && (
+            <div className="mx-5 mt-4 p-3 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-red-800">{error.title}</p>
+                <p className="text-[11px] text-red-700 leading-tight mt-0.5">{error.message}</p>
               </div>
               <button
                 type="button"
-                onClick={() => setUserMatchChoice('pending')}
-                className="text-[10px] uppercase font-bold text-slate-500 hover:underline cursor-pointer"
+                onClick={() => setError(null)}
+                className="text-xs text-red-400 hover:text-red-600 font-bold"
               >
-                Change
+                ✕
               </button>
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
 
-        {/* School Name Searchable Dropdown */}
-        <div className="space-y-1 relative">
-          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-            <GraduationCap size={13} className="text-teal-600" /> School Name
-          </label>
-          
-          <div className="relative">
-            <input
-              type="text"
-              required
-              placeholder="Search or type school name..."
-              value={selectedSchool ? selectedSchool : schoolInput}
-              onChange={(e) => {
-                setSelectedSchool('');
-                setSchoolInput(e.target.value);
-                setShowSchoolDropdown(true);
-              }}
-              onFocus={() => setShowSchoolDropdown(true)}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-teal-500 focus:bg-white rounded-2xl text-sm font-medium transition-all outline-none focus:ring-4 focus:ring-teal-500/10 pr-10 text-slate-900"
-            />
-            <button
-              type="button"
-              onClick={() => setShowSchoolDropdown(!showSchoolDropdown)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            >
-              <ChevronDown size={16} />
-            </button>
-          </div>
-
-          <AnimatePresence>
-            {showSchoolDropdown && (
+          {/* Step Contents */}
+          <div className="p-6 flex-1 flex flex-col justify-between">
+            {/* STEP 1: CONNECT ACCOUNT */}
+            {currentStep === 1 && (
               <motion.div
-                initial={{ opacity: 0, y: 5 }}
+                key="step-1"
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 5 }}
-                className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden"
+                exit={{ opacity: 0, y: -10 }}
+                className="flex flex-col items-center text-center space-y-5 my-auto py-2"
               >
-                {filteredSchools.length > 0 ? (
-                  filteredSchools.map((school, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => {
-                        setSelectedSchool(school);
-                        setSchoolInput('');
-                        setShowSchoolDropdown(false);
-                      }}
-                      className="w-full px-4 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center justify-between border-b border-slate-50 last:border-0"
-                    >
-                      <span>{school}</span>
-                      {selectedSchool === school && <Check size={14} className="text-teal-600" />}
-                    </button>
-                  ))
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowSchoolDropdown(false)}
-                    className="w-full px-4 py-3 text-left text-xs text-slate-500 italic"
-                  >
-                    No exact match. Your custom text will be saved.
-                  </button>
-                )}
+                {/* Green Check Icon Circle */}
+                <div className="w-16 h-16 rounded-full bg-emerald-100/80 border border-emerald-200 flex items-center justify-center text-emerald-600 shadow-sm">
+                  <Check className="w-8 h-8" strokeWidth={3} />
+                </div>
+
+                <div className="space-y-1.5">
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    Google account<br />connected
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-500 max-w-xs leading-relaxed">
+                    Complete your reviewee profile to access your scores.
+                  </p>
+                </div>
+
+                {/* Pending Profile Badge */}
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100/80 border border-amber-200/80 text-amber-900 text-xs font-bold shadow-xs">
+                  <Clock size={13} className="text-amber-700" />
+                  <span>Pending Profile</span>
+                </div>
+
+                {/* Signed-in Account Card */}
+                <div className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3.5 flex items-center gap-3 text-left">
+                  <div className="p-2 bg-white rounded-xl border border-slate-200/80 shadow-xs shrink-0">
+                    <GoogleIcon className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Signed in as</p>
+                    <p className="text-xs sm:text-sm font-black text-slate-800 truncate" title={userEmail}>
+                      {userEmail}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Continue Setup Button */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(2)}
+                  className="w-full py-3.5 bg-[#007C89] hover:bg-[#006873] active:scale-[0.99] text-white rounded-xl font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer mt-4"
+                >
+                  <span>Continue setup</span>
+                  <ArrowRight size={16} />
+                </button>
               </motion.div>
             )}
-          </AnimatePresence>
-        </div>
 
-        {/* Review Branch Searchable Dropdown */}
-        <div className="space-y-1 relative">
-          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-            <MapPin size={13} className="text-teal-600" /> Review Branch
-          </label>
-          
-          <div className="relative">
-            <input
-              type="text"
-              required
-              placeholder="Search or select review branch..."
-              value={selectedBranch ? selectedBranch : branchInput}
-              onChange={(e) => {
-                setSelectedBranch('');
-                setBranchInput(e.target.value);
-                setShowBranchDropdown(true);
-              }}
-              onFocus={() => setShowBranchDropdown(true)}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-teal-500 focus:bg-white rounded-2xl text-sm font-medium transition-all outline-none focus:ring-4 focus:ring-teal-500/10 pr-10 text-slate-900"
-            />
-            <button
-              type="button"
-              onClick={() => setShowBranchDropdown(!showBranchDropdown)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            >
-              <ChevronDown size={16} />
-            </button>
-          </div>
-
-          <AnimatePresence>
-            {showBranchDropdown && (
+            {/* STEP 2: COMPLETE PROFILE */}
+            {currentStep === 2 && (
               <motion.div
-                initial={{ opacity: 0, y: 5 }}
+                key="step-2"
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 5 }}
-                className="absolute z-45 left-0 right-0 mt-1 max-h-44 overflow-y-auto bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden"
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-4"
               >
-                {filteredBranches.length > 0 ? (
-                  filteredBranches.map((branch, idx) => (
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    Complete your profile
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Provide your details to complete your reviewee account.
+                  </p>
+                </div>
+
+                <form onSubmit={handleStep2Submit} className="space-y-3.5">
+                  {/* First Name */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      First Name <span className="text-rose-500 font-bold">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Enter your first name"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-900"
+                    />
+                  </div>
+
+                  {/* Middle Name */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">
+                      Middle Name <span className="text-slate-400 font-normal">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter your middle name"
+                      value={middleName}
+                      onChange={(e) => setMiddleName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-900"
+                    />
+                  </div>
+
+                  {/* Last Name */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      Last Name <span className="text-rose-500 font-bold">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Enter your last name"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-900"
+                    />
+                  </div>
+
+                  {/* Candidate Match Alert (if existing records detected) */}
+                  <AnimatePresence>
+                    {matchCandidate && userMatchChoice === 'pending' && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.96 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.96 }}
+                        className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-3.5 shadow-md space-y-2.5 my-2"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <div className="bg-amber-500 text-white p-1.5 rounded-lg shrink-0 mt-0.5">
+                            <UserCheck size={16} />
+                          </div>
+                          <div className="space-y-1 flex-1 min-w-0">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-amber-800 bg-amber-200 px-2 py-0.5 rounded-full">
+                              Existing Record Found
+                            </span>
+                            <p className="text-xs text-amber-950 font-bold">
+                              Found ID <span className="font-mono text-amber-800 font-black">{matchCandidate.seq_id || matchCandidate.seqId}</span> for:
+                            </p>
+                            <p className="text-xs font-bold text-amber-900">
+                              {(matchCandidate.first_name || matchCandidate.firstName || "").toUpperCase()} {(matchCandidate.last_name || matchCandidate.lastName || "").toUpperCase()}
+                            </p>
+                            <p className="text-[11px] text-amber-800 font-medium">
+                              {matchCandidate.school_name || matchCandidate.schoolName || ''}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1 border-t border-amber-200">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUserMatchChoice('yes');
+                              if (matchCandidate.school_name || matchCandidate.schoolName) {
+                                const sc = matchCandidate.school_name || matchCandidate.schoolName;
+                                setSelectedSchool(sc);
+                                setSchoolInput(sc);
+                              }
+                              if (matchCandidate.review_branch || matchCandidate.reviewBranch) {
+                                const br = matchCandidate.review_branch || matchCandidate.reviewBranch;
+                                setSelectedBranch(br);
+                                setBranchInput(br);
+                              }
+                            }}
+                            className="flex-1 bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-black py-2 px-2.5 rounded-xl transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <CheckCircle2 size={13} />
+                            <span>Yes, link this ID</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setUserMatchChoice('no')}
+                            className="bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-bold py-2 px-3 rounded-xl border border-slate-300 transition-all cursor-pointer"
+                          >
+                            Create new ID
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {matchCandidate && userMatchChoice === 'yes' && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="bg-emerald-50 border border-emerald-300 rounded-xl p-2.5 flex items-center justify-between text-xs text-emerald-900 font-bold"
+                      >
+                        <div className="flex items-center gap-1.5 truncate">
+                          <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                          <span className="truncate">Linking to ID: <strong className="font-mono">{matchCandidate.seq_id || matchCandidate.seqId}</strong></span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setUserMatchChoice('pending')}
+                          className="text-[10px] text-emerald-700 underline font-bold shrink-0 ml-2"
+                        >
+                          Change
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* School / University Dropdown */}
+                  <div className="space-y-1 relative">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      School / University <span className="text-rose-500 font-bold">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        placeholder="Select your school / university"
+                        value={selectedSchool ? selectedSchool : schoolInput}
+                        onChange={(e) => {
+                          setSelectedSchool('');
+                          setSchoolInput(e.target.value);
+                          setShowSchoolDropdown(true);
+                        }}
+                        onFocus={() => setShowSchoolDropdown(true)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-teal-500/20 pr-8 text-slate-900 truncate"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSchoolDropdown(!showSchoolDropdown)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <ChevronDown size={15} />
+                      </button>
+                    </div>
+
+                    <AnimatePresence>
+                      {showSchoolDropdown && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 5 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 5 }}
+                          className="absolute z-50 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
+                        >
+                          {filteredSchools.length > 0 ? (
+                            filteredSchools.map((school, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedSchool(school);
+                                  setSchoolInput('');
+                                  setShowSchoolDropdown(false);
+                                }}
+                                className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center justify-between border-b border-slate-50 last:border-0"
+                              >
+                                <span className="truncate pr-2">{school}</span>
+                                {selectedSchool === school && <Check size={13} className="text-[#007C89] shrink-0" />}
+                              </button>
+                            ))
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setShowSchoolDropdown(false)}
+                              className="w-full px-3 py-2.5 text-left text-xs text-slate-500 italic"
+                            >
+                              No exact match. Your custom entry will be saved.
+                            </button>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Review Branch Dropdown */}
+                  <div className="space-y-1 relative">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      Review Branch <span className="text-rose-500 font-bold">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        placeholder="Select review branch"
+                        value={selectedBranch ? selectedBranch : branchInput}
+                        onChange={(e) => {
+                          setSelectedBranch('');
+                          setBranchInput(e.target.value);
+                          setShowBranchDropdown(true);
+                        }}
+                        onFocus={() => setShowBranchDropdown(true)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-teal-500/20 pr-8 text-slate-900 truncate"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowBranchDropdown(!showBranchDropdown)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <ChevronDown size={15} />
+                      </button>
+                    </div>
+
+                    <AnimatePresence>
+                      {showBranchDropdown && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 5 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 5 }}
+                          className="absolute z-45 left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
+                        >
+                          {filteredBranches.length > 0 ? (
+                            filteredBranches.map((branch, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedBranch(branch);
+                                  setBranchInput('');
+                                  setShowBranchDropdown(false);
+                                }}
+                                className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center justify-between border-b border-slate-50 last:border-0"
+                              >
+                                <span>{branch}</span>
+                                {selectedBranch === branch && <Check size={13} className="text-[#007C89]" />}
+                              </button>
+                            ))
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setShowBranchDropdown(false)}
+                              className="w-full px-3 py-2 text-left text-xs text-slate-500 italic"
+                            >
+                              Custom branch will be saved.
+                            </button>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Required Info Notice */}
+                  <div className="bg-sky-50/80 border border-sky-200/80 rounded-xl p-2.5 flex items-center gap-2 text-sky-800 text-xs font-medium">
+                    <Info size={14} className="text-sky-600 shrink-0" />
+                    <span>Required details cannot be skipped.</span>
+                  </div>
+
+                  {/* Bottom Controls (Back and Next) */}
+                  <div className="flex items-center gap-2.5 pt-2">
                     <button
-                      key={idx}
                       type="button"
-                      onClick={() => {
-                        setSelectedBranch(branch);
-                        setBranchInput('');
-                        setShowBranchDropdown(false);
-                      }}
-                      className="w-full px-4 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center justify-between border-b border-slate-50 last:border-0"
+                      onClick={() => setCurrentStep(1)}
+                      className="px-4 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <span>{branch}</span>
-                      {selectedBranch === branch && <Check size={14} className="text-teal-600" />}
+                      <ArrowLeft size={15} />
+                      <span>Back</span>
                     </button>
-                  ))
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowBranchDropdown(false)}
-                    className="w-full px-4 py-3 text-left text-xs text-slate-500 italic"
-                  >
-                    No match. Your custom text will be saved.
-                  </button>
-                )}
+
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="flex-1 py-3 bg-[#007C89] hover:bg-[#006873] active:scale-[0.99] text-white rounded-xl font-bold text-xs sm:text-sm transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 size={15} className="animate-spin" />
+                          <span>Saving…</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Next</span>
+                          <ArrowRight size={15} />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
               </motion.div>
             )}
-          </AnimatePresence>
-        </div>
 
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-4 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-black text-sm tracking-wider uppercase transition-all shadow-lg shadow-teal-600/20 active:scale-98 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer mt-8"
-        >
-          {loading ? (
-            <>
-              <Loader2 size={16} className="animate-spin" />
-              Activating Account…
-            </>
-          ) : (
-            <>
-              Activate My Account
-              <ArrowRight size={16} />
-            </>
-          )}
-        </button>
-      </form>
-    </div>
+            {/* STEP 3: REVIEWEE ID (Account Active) */}
+            {currentStep === 3 && (
+              <motion.div
+                key="step-3"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="flex flex-col items-center text-center space-y-5 my-auto py-2"
+              >
+                {/* Celebratory Icon */}
+                <div className="w-16 h-16 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center text-[#007C89] shadow-sm">
+                  <PartyPopper className="w-8 h-8" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    Reviewee account<br />active
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-500 max-w-xs leading-relaxed">
+                    Your reviewee account has been successfully set up!
+                  </p>
+                </div>
+
+                {/* ID Display Card with Copy Feature */}
+                <div className="w-full bg-teal-50/50 border border-teal-200/90 rounded-2xl p-5 space-y-1.5 shadow-xs">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Your Reviewee ID
+                  </p>
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="font-mono text-2xl sm:text-3xl font-black text-[#007C89] tracking-wider">
+                      {savedUserData?.seqId || savedUserData?.seq_id || 'SRC ID'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCopyId}
+                      className="p-1.5 rounded-lg hover:bg-teal-100 text-[#007C89] transition-colors cursor-pointer"
+                      title={copiedId ? "Copied!" : "Copy Reviewee ID"}
+                    >
+                      {copiedId ? <Check size={18} className="text-emerald-600" /> : <Copy size={18} />}
+                    </button>
+                  </div>
+                  {copiedId && (
+                    <p className="text-[10px] font-bold text-emerald-600 animate-fade-in">
+                      Copied to clipboard!
+                    </p>
+                  )}
+                </div>
+
+                <p className="text-xs text-slate-600 font-medium">
+                  Your scores are now linked to your account.
+                </p>
+
+                {/* Continue to Welcome Button */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(4)}
+                  className="w-full py-3.5 bg-[#007C89] hover:bg-[#006873] active:scale-[0.99] text-white rounded-xl font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer mt-4"
+                >
+                  <span>Continue</span>
+                  <ArrowRight size={16} />
+                </button>
+              </motion.div>
+            )}
+
+            {/* STEP 4: WELCOME (Guide to Portal) */}
+            {currentStep === 4 && (
+              <motion.div
+                key="step-4"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-4"
+              >
+                <div className="flex flex-col items-center text-center space-y-2">
+                  <div className="w-14 h-14 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center text-[#007C89] shadow-sm">
+                    <Sparkles className="w-7 h-7" />
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    Welcome to your<br />Reviewee Portal
+                  </h2>
+                  <p className="text-xs text-slate-500 max-w-xs">
+                    You're all set! Here are some things you can do in your portal.
+                  </p>
+                </div>
+
+                {/* Guide Cards */}
+                <div className="space-y-2.5 pt-1">
+                  {/* Home Card */}
+                  <div className="p-3 bg-white border border-slate-200 rounded-2xl flex items-center justify-between hover:border-teal-300 transition-colors shadow-2xs">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-[#007C89] shrink-0">
+                        <Home size={18} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900">Home</p>
+                        <p className="text-[11px] text-slate-500">View your progress</p>
+                      </div>
+                    </div>
+                    <ChevronRight size={16} className="text-slate-400" />
+                  </div>
+
+                  {/* Scores Card */}
+                  <div className="p-3 bg-white border border-slate-200 rounded-2xl flex items-center justify-between hover:border-teal-300 transition-colors shadow-2xs">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-[#007C89] shrink-0">
+                        <BarChart3 size={18} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900">Scores</p>
+                        <p className="text-[11px] text-slate-500">See examination results</p>
+                      </div>
+                    </div>
+                    <ChevronRight size={16} className="text-slate-400" />
+                  </div>
+
+                  {/* Profile Card */}
+                  <div className="p-3 bg-white border border-slate-200 rounded-2xl flex items-center justify-between hover:border-teal-300 transition-colors shadow-2xs">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-[#007C89] shrink-0">
+                        <User size={18} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900">Profile</p>
+                        <p className="text-[11px] text-slate-500">Update your details</p>
+                      </div>
+                    </div>
+                    <ChevronRight size={16} className="text-slate-400" />
+                  </div>
+                </div>
+
+                {/* Bottom Actions: Open Portal & Skip Guide */}
+                <div className="space-y-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleFinishOnboarding}
+                    className="w-full py-3.5 bg-[#007C89] hover:bg-[#006873] active:scale-[0.99] text-white rounded-xl font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>Open Portal</span>
+                    <ArrowRight size={16} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleFinishOnboarding}
+                    className="w-full py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 rounded-xl font-bold text-xs transition-all flex items-center justify-center cursor-pointer"
+                  >
+                    Skip guide
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </div>
+        </div>
+      </div>
     </>
   );
 }

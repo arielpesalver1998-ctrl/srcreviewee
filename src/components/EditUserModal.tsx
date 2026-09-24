@@ -16,6 +16,7 @@ interface EditUserModalProps {
 }
 
 export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onClose, onSave, currentUserRole, allUsers = [] }) => {
+  const initialStatus = String(user.accountStatus || user.status || 'active').toLowerCase() === 'dropped' ? 'dropped' : 'active';
   const [formData, setFormData] = useState({
     firstName: user.firstName || user.first_name || '',
     middleName: cleanOptionalName(user.middleName || user.middle_name || ''),
@@ -23,6 +24,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
     email: user.email || '',
     role: getUserRole(user),
     seqId: user.seqId || user.seq_id || user.id_number || '',
+    status: initialStatus,
   });
   const [isConfirming, setIsConfirming] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -77,6 +79,8 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
         middleName: cleanedMiddle,
         middle_name: cleanedMiddle,
         middle_initial: cleanedMiddle ? `${cleanedMiddle.charAt(0).toUpperCase()}.` : '',
+        status: formData.status,
+        accountStatus: formData.status,
       });
       setIsConfirming(false);
       onClose();
@@ -149,6 +153,20 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
                 options={availableRoles.map(r => ({ value: r, label: r }))}
                 onChange={(r) => setFormData({...formData, role: r as AppRole})}
                 placeholder="Select Role"
+                searchable={false}
+                disabled={isEditingForbidden}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">Account Status</label>
+              <AnimatedSelect
+                value={formData.status}
+                options={[
+                  { value: 'active', label: 'Active' },
+                  { value: 'dropped', label: 'Dropped' },
+                ]}
+                onChange={(s) => setFormData({...formData, status: s})}
+                placeholder="Select Status"
                 searchable={false}
                 disabled={isEditingForbidden}
               />

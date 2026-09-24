@@ -153,21 +153,27 @@ export function SimpleTable({
   loading,
   emptyLabel,
   compact = false,
+  bordered = false,
 }: {
   rows: any[];
   columns: {
     key: string;
     header: string;
+    width?: string;
+    align?: 'left' | 'center' | 'right';
+    className?: string;
+    headerClassName?: string;
     render: (row: any) => React.ReactNode;
   }[];
   loading?: boolean;
   emptyLabel?: string;
   compact?: boolean;
+  bordered?: boolean;
 }) {
   if (loading) {
     return (
-      <div className={`flex items-center justify-center text-slate-400 ${compact ? 'h-20' : 'h-32'}`}>
-        <Loader2 className="h-5 w-5 animate-spin" />
+      <div className={`flex items-center justify-center text-slate-400 ${compact ? 'h-24' : 'h-40'}`}>
+        <Loader2 className="h-5 w-5 animate-spin text-teal-600" />
       </div>
     );
   }
@@ -181,29 +187,43 @@ export function SimpleTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[620px] text-left">
+    <div className={`overflow-x-auto ${bordered ? 'rounded-2xl border border-slate-200/90 shadow-xs' : ''}`}>
+      <table className="w-full min-w-[760px] text-left border-collapse">
         <thead>
-          <tr className="border-b border-slate-100">
-            {columns.map((col) => (
-              <th
-                key={col.key}
-                className={`px-3 ${compact ? 'py-2' : 'py-3'} text-[10px] font-black uppercase tracking-widest text-slate-400`}
-              >
-                {col.header}
-              </th>
-            ))}
+          <tr className={`border-b border-slate-200 bg-slate-50/90 ${bordered ? 'divide-x divide-slate-200' : ''}`}>
+            {columns.map((col) => {
+              const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left';
+              return (
+                <th
+                  key={col.key}
+                  style={col.width ? { width: col.width } : undefined}
+                  className={`px-3 sm:px-3.5 ${compact ? 'py-2.5' : 'py-3.5'} text-[10px] font-black uppercase tracking-widest text-slate-500 select-none ${alignClass} ${col.headerClassName || ''}`}
+                >
+                  {col.header}
+                </th>
+              );
+            })}
           </tr>
         </thead>
 
-        <tbody>
+        <tbody className={`divide-y divide-slate-100 ${bordered ? 'divide-y divide-slate-200/80' : ''}`}>
           {rows.map((row, index) => (
-            <tr key={row.id ? `${row.id}_${index}` : `row_${index}`} className="border-b border-slate-100 last:border-0">
-              {columns.map((col) => (
-                <td key={col.key} className={`px-3 ${compact ? 'py-2' : 'py-3'} text-sm`}>
-                  {col.render(row)}
-                </td>
-              ))}
+            <tr
+              key={row.id ? `${row.id}_${index}` : `row_${index}`}
+              className={`hover:bg-slate-50/80 transition-colors ${bordered ? 'divide-x divide-slate-200/70' : ''}`}
+            >
+              {columns.map((col) => {
+                const alignClass = col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left';
+                return (
+                  <td
+                    key={col.key}
+                    style={col.width ? { width: col.width } : undefined}
+                    className={`px-3 sm:px-3.5 ${compact ? 'py-2.5 text-xs' : 'py-3.5 text-sm'} align-middle ${alignClass} ${col.className || ''}`}
+                  >
+                    {col.render(row)}
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>

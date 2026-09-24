@@ -50,12 +50,10 @@ export function RevieweePortal({
   data, 
   onLogout,
   onSwitchToAdmin,
-  onSwitchToStaff,
 }: { 
   data: RevieweeData; 
   onLogout: () => void;
   onSwitchToAdmin?: () => void;
-  onSwitchToStaff?: () => void;
 }) {
   const [revieweeData, setRevieweeData] = useState(data);
   
@@ -400,25 +398,6 @@ export function RevieweePortal({
         <h3 className="px-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Student Utilities</h3>
         <QuickActionsGrid 
           actions={[
-            ...(isAdmin(revieweeData) && onSwitchToAdmin
-              ? [
-                  {
-                    key: 'admin-console',
-                    label: 'Admin Console',
-                    icon: <Shield size={18} className="text-teal-600" />,
-                    onClick: onSwitchToAdmin,
-                  },
-                ]
-              : isStaff(revieweeData) && onSwitchToStaff
-              ? [
-                  {
-                    key: 'staff-console',
-                    label: 'Staff Portal',
-                    icon: <Shield size={18} className="text-blue-600" />,
-                    onClick: onSwitchToStaff,
-                  },
-                ]
-              : []),
             { key: 'scores', label: 'Score History', icon: <ClipboardList size={18} />, onClick: () => handleTabChange('scores') },
             { key: 'eval', label: 'Daily Evaluation', icon: <Calendar size={18} />, onClick: () => handleTabChange('daily') },
             { key: 'progress', label: 'Progress Analytics', icon: <TrendingUp size={18} />, onClick: () => handleTabChange('progress') },
@@ -546,42 +525,16 @@ export function RevieweePortal({
         navItems={drawerNavItems}
         footerItems={bottomNavItems}
         headerRightExtra={
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {isAdmin(revieweeData) && onSwitchToAdmin && (
-              <button
-                onClick={onSwitchToAdmin}
-                className="flex h-8 sm:h-9 items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 rounded-xl bg-slate-900 text-teal-300 hover:bg-slate-800 transition-colors border border-slate-700 font-black text-[11px] sm:text-xs shadow-sm cursor-pointer"
-                title="Return to Admin Dashboard"
-              >
-                <Shield size={13} className="text-teal-400" />
-                <span className="hidden xs:inline">Admin Dashboard</span>
-                <span className="xs:hidden">Admin</span>
-              </button>
-            )}
-
-            {isStaff(revieweeData) && onSwitchToStaff && (
-              <button
-                onClick={onSwitchToStaff}
-                className="flex h-8 sm:h-9 items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 rounded-xl bg-blue-900 text-blue-200 hover:bg-blue-800 transition-colors border border-blue-700 font-black text-[11px] sm:text-xs shadow-sm cursor-pointer"
-                title="Return to Staff Dashboard"
-              >
-                <Shield size={13} className="text-blue-400" />
-                <span className="hidden xs:inline">Staff Dashboard</span>
-                <span className="xs:hidden">Staff</span>
-              </button>
-            )}
-
-            {isAdmin(revieweeData) && (
-              <button
-                onClick={() => setShowAdminFolderModal(true)}
-                className="flex h-8 sm:h-9 items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors border border-teal-200/80 font-bold text-[11px] sm:text-xs shadow-sm cursor-pointer"
-                title="Admin Folder Synchronization"
-              >
-                <FolderSync size={14} className="text-teal-600" />
-                <span className="hidden sm:inline">Folder Sync</span>
-              </button>
-            )}
-          </div>
+          isAdmin(revieweeData) ? (
+            <button
+              onClick={() => setShowAdminFolderModal(true)}
+              className="flex h-8 sm:h-9 items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors border border-teal-200/80 font-bold text-[11px] sm:text-xs shadow-sm cursor-pointer"
+              title="Admin Folder Synchronization"
+            >
+              <FolderSync size={14} className="text-teal-600" />
+              <span className="hidden sm:inline">Folder Sync</span>
+            </button>
+          ) : undefined
         }
       >
         <div className="mx-auto max-w-5xl">

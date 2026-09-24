@@ -29,7 +29,8 @@ import {
   Trophy,
   Users2,
   Bell,
-  AlertCircle
+  AlertCircle,
+  Building2,
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { firestoreDb } from '../utils/firebaseClient';
@@ -194,6 +195,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         userRole: updatedRole,
         seqId: cleanSeqId,
         seq_id: cleanSeqId,
+        status: updatedData.status || updatedData.accountStatus || 'active',
+        accountStatus: updatedData.status || updatedData.accountStatus || 'active',
         updatedAt: new Date().toISOString(),
       });
       setActionNotice(`User ${updatedData.firstName} ${updatedData.lastName} updated successfully.`);
@@ -247,31 +250,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         db={firestoreDb}
         navItems={drawerNavItems}
         footerItems={bottomNavItems}
-        headerRightExtra={
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {onSwitchToStaff && (
-              <button
-                onClick={onSwitchToStaff}
-                className="flex h-8 sm:h-9 items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 rounded-xl bg-blue-900 text-blue-200 hover:bg-blue-800 font-black text-[11px] sm:text-xs shadow-sm cursor-pointer transition-colors border border-blue-700"
-                title="Switch to Staff Portal View"
-              >
-                <Shield size={13} className="text-blue-400" />
-                <span className="hidden sm:inline">Staff View</span>
-                <span className="sm:hidden">Staff</span>
-              </button>
-            )}
-
-            <button
-              onClick={onSwitchToReviewee}
-              className="flex h-8 sm:h-9 items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 rounded-xl bg-slate-900 text-teal-300 hover:bg-slate-800 font-black text-[11px] sm:text-xs shadow-sm cursor-pointer transition-colors border border-slate-700"
-              title="Switch to Student / Reviewee Portal View"
-            >
-              <Eye size={13} className="text-teal-400" />
-              <span className="hidden sm:inline">Reviewee View</span>
-              <span className="sm:hidden">Student</span>
-            </button>
-          </div>
-        }
       >
         <div className="mx-auto max-w-7xl">
           {actionNotice && (
@@ -522,34 +500,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-xs">
+                <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                      <th className="py-2.5 px-3">Student Name</th>
-                      <th className="py-2.5 px-3">ID Number</th>
-                      <th className="py-2.5 px-3">School</th>
-                      <th className="py-2.5 px-3">Branch</th>
-                      <th className="py-2.5 px-3 text-right">Actions</th>
+                    <tr className="border-b border-slate-200 bg-slate-50/90 divide-x divide-slate-200 text-slate-500 font-black uppercase tracking-wider text-[10px]">
+                      <th className="py-2.5 px-3.5">Student Name</th>
+                      <th className="py-2.5 px-3.5">ID Number</th>
+                      <th className="py-2.5 px-3.5">School / University</th>
+                      <th className="py-2.5 px-3.5">Branch</th>
+                      <th className="py-2.5 px-3.5 text-center">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                  <tbody className="divide-y divide-slate-200/80 font-medium text-slate-700">
                     {metrics.recentReviewees.map((u: any) => {
                       const name = [u.first_name || u.firstName, u.last_name || u.lastName].filter(Boolean).join(' ') || u.displayName || u.email;
                       const seq = u.seq_id || u.seqId || u.id_number || '—';
+                      const rawSt = String(u.accountStatus || u.status || 'active').toLowerCase();
+                      const isDropped = rawSt === 'dropped' || rawSt === 'drop';
                       return (
-                        <tr key={u.uid || u.id} className="hover:bg-slate-50/70 transition-colors">
-                          <td className="py-3 px-3 font-bold text-slate-900 flex items-center gap-2">
-                            <UserAvatar photoURL={u.photoURL || u.photo_url} altText={name} size={24} className="rounded-full" />
-                            <span>{name}</span>
+                        <tr key={u.uid || u.id} className="hover:bg-teal-50/20 divide-x divide-slate-200/70 transition-colors">
+                          <td className="py-3 px-3.5 font-bold flex items-center gap-2 whitespace-nowrap">
+                            <UserAvatar photoURL={u.photoURL || u.photo_url} altText={name} size={24} className="rounded-full shrink-0" />
+                            <span className={`whitespace-nowrap ${isDropped ? 'text-slate-400 line-through decoration-rose-400' : 'text-slate-900'}`}>{name}</span>
+                            {isDropped && (
+                              <span className="text-[9px] font-extrabold text-rose-600 bg-rose-50 border border-rose-200 px-1 py-0.5 rounded whitespace-nowrap shrink-0">
+                                Dropped
+                              </span>
+                            )}
                           </td>
-                          <td className="py-3 px-3 font-mono font-bold text-slate-600">{seq}</td>
-                          <td className="py-3 px-3 text-slate-600 truncate max-w-[180px]">{u.school_name || u.schoolName || u.school || '—'}</td>
-                          <td className="py-3 px-3 text-slate-600">{u.review_branch || u.reviewBranch || u.branch || '—'}</td>
-                          <td className="py-3 px-3 text-right">
+                          <td className="py-3 px-3.5 font-mono font-bold text-slate-600">{seq}</td>
+                          <td className="py-3 px-3.5 text-slate-700">
+                            <div className="flex items-center gap-1.5 truncate max-w-[240px]" title={u.school_name || u.schoolName || u.school || '—'}>
+                              <Building2 size={12} className="text-slate-400 shrink-0" />
+                              <span className="truncate">{u.school_name || u.schoolName || u.school || '—'}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3.5 text-slate-600">{u.review_branch || u.reviewBranch || u.branch || '—'}</td>
+                          <td className="py-3 px-3.5 text-center">
                             <button
                               onClick={() => setEditingUser(u)}
-                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] rounded-lg transition-colors cursor-pointer"
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] rounded-lg transition-colors cursor-pointer border border-slate-200"
                             >
                               Edit
                             </button>

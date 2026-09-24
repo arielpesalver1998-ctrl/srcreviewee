@@ -1,4 +1,5 @@
 import { getUserRole } from '../utils/roleUtils';
+import { normalizeNameForComparison } from '../utils/nameNormalization';
 
 export type CanonicalUserIdentity = {
   userDocId: string;
@@ -157,12 +158,65 @@ export function compareUsersAlphabetically(a: any, b: any): number {
   );
 }
 
+export type UserAccountStatus = 'active' | 'dropped' | 'pending_profile' | 'merged' | 'deleted';
+
+export function getUserAccountStatus(user: any): UserAccountStatus {
+  if (!user) return 'deleted';
+
+  const rawStatus = String(user.accountStatus || user.status || '').trim().toLowerCase();
+
+  if (rawStatus === 'merged' || user.mergedIntoUid) return 'merged';
+  if (rawStatus === 'deleted' || user.isDeleted || user.deleted || user.is_deleted) return 'deleted';
+  if (rawStatus === 'dropped' || rawStatus === 'drop') return 'dropped';
+  if (rawStatus === 'pending_profile' || rawStatus === 'pending') return 'pending_profile';
+
+  const role = String(user.role || user.role_name || user.userRole || '').toLowerCase();
+  const isAdminOrStaff = role === 'admin' || role === 'staff' || user.isAdmin || user.isStaff;
+
+  if (isAdminOrStaff) {
+    const hasName = Boolean(user.firstName || user.first_name || user.lastName || user.last_name || user.displayName || user.name);
+    const hasEmail = Boolean(user.email);
+    if (!hasName && !hasEmail) return 'pending_profile';
+    return (rawStatus === 'active' || rawStatus === '') ? 'active' : 'pending_profile';
+  }
+
+  // For Reviewees:
+  // Must satisfy profile completion AND have a valid reviewee ID and valid name
+  if (user.profileCompleted === false) {
+    return 'pending_profile';
+  }
+
+  const isRevieweeValid = isValidRevieweeRecord(user);
+  if (!isRevieweeValid) {
+    // If it lacks a valid sequence ID or valid name, classify as pending_profile instead of active
+    return 'pending_profile';
+  }
+
+  if (rawStatus === 'active' || rawStatus === '') {
+    return 'active';
+  }
+
+  return 'pending_profile';
+}
+
 export function isValidRevieweeRecord(user: any): boolean {
   if (!user) return false;
 
   // Account status check
   const status = String(user.accountStatus || user.status || "").toLowerCase();
-  if (status === "merged" || status === "deleted" || user.isDeleted || user.deleted || user.is_deleted) {
+  if (
+    status === "merged" ||
+    status === "deleted" ||
+    status === "pending_profile" ||
+    status === "pending" ||
+    user.isDeleted ||
+    user.deleted ||
+    user.is_deleted
+  ) {
+    return false;
+  }
+
+  if (user.profileCompleted === false) {
     return false;
   }
 
@@ -182,14 +236,15 @@ export function isValidRevieweeRecord(user: any): boolean {
   const lastName = String(user.last_name ?? user.lastName ?? "").trim();
   const fullName = String(user.full_name ?? user.fullName ?? user.displayName ?? user.name ?? "").trim();
 
-  const hasId = Boolean(idNumber && idNumber !== "—" && idNumber !== "-" && idNumber !== "N/A");
+  const hasId = Boolean(idNumber && idNumber !== "—" && idNumber !== "-" && idNumber.toUpperCase() !== "N/A" && idNumber.toUpperCase() !== "NONE");
 
-  // Check if formatted name is comma-only or blank
-  // e.g. ", ", ",", or both last and first names are empty and full name is empty/comma
+  // Check if formatted name is comma-only, blank, or placeholder
   const isCommaOnlyName =
     (!lastName && !firstName && (!fullName || fullName === "," || fullName === ", " || fullName.trim() === ",")) ||
     fullName.trim() === "," ||
-    fullName.trim() === ", ";
+    fullName.trim() === ", " ||
+    fullName.toUpperCase() === "UNKNOWN USER" ||
+    fullName.toUpperCase() === "UNNAMED USER";
 
   const hasName = Boolean((firstName || lastName || fullName) && !isCommaOnlyName);
 
@@ -201,7 +256,15 @@ export function isValidUserRecord(user: any): boolean {
   if (!user) return false;
 
   const status = String(user.accountStatus || user.status || "").toLowerCase();
-  if (status === "merged" || status === "deleted" || user.isDeleted || user.deleted || user.is_deleted) {
+  if (
+    status === "merged" ||
+    status === "deleted" ||
+    status === "pending_profile" ||
+    status === "pending" ||
+    user.isDeleted ||
+    user.deleted ||
+    user.is_deleted
+  ) {
     return false;
   }
 
@@ -462,14 +525,15 @@ function mergeDuplicateUserRecords(prev: any, incoming: any): any {
 }
 
 /**
- * Deduplicates any user list to strictly guarantee ONLY ONE USER PER ID NUMBER.
- * If multiple documents in Firestore share the same sequence/student ID,
+ * Deduplicates any user list to strictly guarantee NO DUPLICATE ID NUMBERS AND NO DUPLICATE NAMES.
+ * If multiple documents in Firestore share the same sequence/student ID or the same normalized name,
  * they are merged into a single canonical user record.
  */
 export function deduplicateUsersByIdNumber<T = any>(users: T[]): T[] {
   if (!Array.isArray(users)) return [];
 
   const seenIds = new Map<string, any>();
+  const seenNames = new Map<string, any>();
   const seenEmails = new Map<string, any>();
   const seenUids = new Map<string, any>();
 
@@ -489,6 +553,9 @@ export function deduplicateUsersByIdNumber<T = any>(users: T[]): T[] {
 
     const email = String(canonical.email || u.email || "").trim().toLowerCase();
     const uid = String(u.uid || u.id || u.doc_id || "").trim();
+    const normName = normalizeNameForComparison(
+      canonical.fullName || [canonical.firstName, canonical.lastName].filter(Boolean).join(' ')
+    );
 
     if (idKey) {
       // 1. Group by unique ID number
@@ -499,8 +566,20 @@ export function deduplicateUsersByIdNumber<T = any>(users: T[]): T[] {
         const merged = mergeDuplicateUserRecords(existing, u);
         seenIds.set(idKey, merged);
       }
+      if (normName && normName.length > 2) {
+        seenNames.set(normName, seenIds.get(idKey));
+      }
+    } else if (normName && normName.length > 2 && seenNames.has(normName)) {
+      // 2. Matches an existing record with the exact same full name
+      const existing = seenNames.get(normName);
+      const merged = mergeDuplicateUserRecords(existing, u);
+      const existingId = canonicalizeIdNumber(existing.seqId || existing.seq_id || existing.id_number || existing.srcId);
+      if (existingId) {
+        seenIds.set(existingId, merged);
+      }
+      seenNames.set(normName, merged);
     } else if (email) {
-      // 2. Pure accounts without an ID number: deduplicate by email
+      // 3. Pure accounts without an ID number: deduplicate by email
       const emailKey = `email:${email}`;
       if (!seenEmails.has(emailKey)) {
         seenEmails.set(emailKey, u);
@@ -509,8 +588,14 @@ export function deduplicateUsersByIdNumber<T = any>(users: T[]): T[] {
         const merged = mergeDuplicateUserRecords(existing, u);
         seenEmails.set(emailKey, merged);
       }
+      if (normName && normName.length > 2) {
+        seenNames.set(normName, seenEmails.get(emailKey));
+      }
+    } else if (normName && normName.length > 2 && !seenNames.has(normName)) {
+      // 4. Unique Name without ID or Email
+      seenNames.set(normName, u);
     } else if (uid) {
-      // 3. Fallback: key by UID
+      // 5. Fallback: key by UID
       const uidKey = `uid:${uid}`;
       if (!seenUids.has(uidKey)) {
         seenUids.set(uidKey, u);
@@ -523,14 +608,36 @@ export function deduplicateUsersByIdNumber<T = any>(users: T[]): T[] {
   }
 
   const result: T[] = [];
+  const processedNames = new Set<string>();
 
   // Add all unique ID number users
-  seenIds.forEach((user) => result.push(user));
+  seenIds.forEach((user) => {
+    const canonical = resolveCanonicalUserIdentity(user);
+    const normName = normalizeNameForComparison(
+      canonical.fullName || [canonical.firstName, canonical.lastName].filter(Boolean).join(' ')
+    );
+    if (normName) processedNames.add(normName);
+    result.push(user);
+  });
 
-  // Add all unique email users that do not already have an ID number in seenIds
+  // Add all unique email users that do not already have an ID number or matching name in seenIds
   seenEmails.forEach((user) => {
     const idKey = canonicalizeIdNumber(user.seqId || user.seq_id || user.id_number || user.srcId);
-    if (!idKey || !seenIds.has(idKey)) {
+    const canonical = resolveCanonicalUserIdentity(user);
+    const normName = normalizeNameForComparison(
+      canonical.fullName || [canonical.firstName, canonical.lastName].filter(Boolean).join(' ')
+    );
+
+    if ((!idKey || !seenIds.has(idKey)) && (!normName || !processedNames.has(normName))) {
+      if (normName) processedNames.add(normName);
+      result.push(user);
+    }
+  });
+
+  // Add unique names that were not covered by ID or Email
+  seenNames.forEach((user, nameKey) => {
+    if (!processedNames.has(nameKey)) {
+      processedNames.add(nameKey);
       result.push(user);
     }
   });
@@ -540,7 +647,17 @@ export function deduplicateUsersByIdNumber<T = any>(users: T[]): T[] {
     const idKey = canonicalizeIdNumber(user.seqId || user.seq_id || user.id_number || user.srcId);
     const email = String(user.email || "").trim().toLowerCase();
     const emailKey = `email:${email}`;
-    if ((!idKey || !seenIds.has(idKey)) && (!email || !seenEmails.has(emailKey))) {
+    const canonical = resolveCanonicalUserIdentity(user);
+    const normName = normalizeNameForComparison(
+      canonical.fullName || [canonical.firstName, canonical.lastName].filter(Boolean).join(' ')
+    );
+
+    if (
+      (!idKey || !seenIds.has(idKey)) &&
+      (!email || !seenEmails.has(emailKey)) &&
+      (!normName || !processedNames.has(normName))
+    ) {
+      if (normName) processedNames.add(normName);
       result.push(user);
     }
   });

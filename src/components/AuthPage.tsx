@@ -205,14 +205,15 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             const hasName = hasFirstName && hasLastName;
             const hasSchool = Boolean(data.school_name || data.schoolName || data.school);
             const hasBranch = Boolean(data.review_branch || data.reviewBranch || data.branch);
+            const hasSeqId = Boolean(data.seq_id || data.seqId || data.id_number || data.srcId);
 
             const isGoogleUser = user.providerData?.some(p => p.providerId === 'google.com') || data.registrationMethod === 'google' || data.authProvider === 'google';
             const isManualUser = data.registrationMethod === 'manual' || data.authProvider === 'password' || !isGoogleUser;
 
-            const profileCompleted = data.profileCompleted === true || (isManualUser && hasName && hasSchool && hasBranch);
+            const profileCompleted = data.profileCompleted === true && hasSeqId && hasName && hasSchool && hasBranch;
 
-            // CRITICAL: Complete Your Profile card must ONLY be shown to a first-time Google user whose profile is incomplete!
-            if (isGoogleUser && !profileCompleted && (!hasName || !hasSchool || !hasBranch)) {
+            // CRITICAL: Complete Your Profile card must be shown to Google users whose profile setup has not completed
+            if (isGoogleUser && (!profileCompleted || data.accountStatus === 'pending_profile' || !hasSeqId || !hasName || !hasSchool || !hasBranch)) {
               setMode('profile-setup');
               return;
             }
@@ -436,16 +437,22 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             <ProfileSetup
               initialData={initialSetupData}
               onCompleted={(linkResult) => {
-                if (linkResult.status === 'pending_verification') {
+                if (linkResult?.status === 'pending_verification' || linkResult?.accountStatus === 'pending_verification') {
                   setMode('verification-pending');
                 } else {
                   const isGoogle = currentUser?.providerData?.some((p: any) => p.providerId === 'google.com');
                   if (isGoogle || currentUser?.emailVerified || sandboxBypassRef.current) {
-                    if (userDoc) {
-                      onSuccessRef.current(userDoc);
-                    } else if (currentUser) {
-                      onSuccessRef.current({ id: currentUser.uid, email: currentUser.email, role: 'Reviewee' });
-                    }
+                    const completeUser = {
+                      id: currentUser?.uid,
+                      uid: currentUser?.uid,
+                      email: currentUser?.email,
+                      role: 'Reviewee',
+                      accountStatus: 'active',
+                      profileCompleted: true,
+                      ...(userDoc || {}),
+                      ...(linkResult || {}),
+                    };
+                    onSuccessRef.current(completeUser);
                   } else {
                     setMode('email-verification-pending');
                   }

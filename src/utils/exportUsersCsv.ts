@@ -1,6 +1,6 @@
 import { collection, getDocs, Timestamp } from 'firebase/firestore';
 import { firestoreDb } from './firebaseClient';
-import { resolveCanonicalUserIdentity, formatFormalName, cleanOptionalName, deduplicateUsersByIdNumber } from '../services/userIdentityResolver';
+import { resolveCanonicalUserIdentity, formatFormalName, cleanOptionalName, deduplicateUsersByIdNumber, getUserAccountStatus } from '../services/userIdentityResolver';
 import { getUserRole } from './roleUtils';
 
 function escapeCsvCell(value: any): string {
@@ -108,7 +108,7 @@ export async function downloadRegisteredUsersCsv(fallbackUsers?: any[]): Promise
         email: canonical.email || u.email || '',
         school: canonical.school || u.school_name || u.schoolName || u.school || '',
         branch: canonical.branch || u.review_branch || u.reviewBranch || u.branch || '',
-        accountStatus: u.accountStatus || u.status || 'active',
+        accountStatus: getUserAccountStatus(u),
         authProvider: u.authProvider || u.registrationMethod || (u.providerData?.[0]?.providerId) || 'password',
         scoresCount: totalScores,
         registrationDate: regDate,

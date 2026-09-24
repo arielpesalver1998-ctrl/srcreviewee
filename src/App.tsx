@@ -6,6 +6,7 @@ import { SuccessPage } from './components/SuccessPage';
 import { RevieweePortal } from './components/RevieweePortal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { StaffDashboard } from './components/StaffDashboard';
+import { RolePreviewFloatingSwitcher } from './components/RolePreviewFloatingSwitcher';
 import { FirebaseDiagnosticPanel } from './components/FirebaseDiagnosticPanel';
 import { logout } from './utils/auth';
 import { firebaseConfigured, getFirebaseConfig } from './utils/firebase';
@@ -298,6 +299,17 @@ export default function App() {
 
             {view === 'portal' && enrollmentData && (
               <div className="fixed inset-0 z-[100] w-full h-full bg-[#F8FAFC] dark:bg-[#020617] overflow-hidden animate-fade-in">
+                {/* Universal Floating Role Switcher: STRICTLY ACCESSIBLE BY ADMIN ONLY */}
+                {isAdmin(enrollmentData) && (
+                  <RolePreviewFloatingSwitcher
+                    currentUser={enrollmentData}
+                    currentMode={portalMode}
+                    onSwitchToAdmin={handleSwitchToAdmin}
+                    onSwitchToStaff={handleSwitchToStaff}
+                    onSwitchToReviewee={handleSwitchToReviewee}
+                  />
+                )}
+
                 {/* 1. ADMIN DASHBOARD: STRICTLY ACCESSIBLE BY ADMIN ONLY */}
                 {isAdmin(enrollmentData) && portalMode === 'admin' ? (
                   <AdminDashboard
@@ -311,16 +323,14 @@ export default function App() {
                   <StaffDashboard
                     currentUser={enrollmentData}
                     onLogout={handleReset}
-                    onSwitchToReviewee={handleSwitchToReviewee}
                     onSwitchToAdmin={isAdmin(enrollmentData) ? handleSwitchToAdmin : undefined}
                   />
                 ) : (
-                  /* 3. REVIEWEE DASHBOARD: FOR REVIEWEE STUDENTS ONLY */
+                  /* 3. REVIEWEE DASHBOARD: FOR REVIEWEE STUDENTS (AND ADMIN PREVIEW) */
                   <RevieweePortal
                     data={enrollmentData}
                     onLogout={handleReset}
                     onSwitchToAdmin={isAdmin(enrollmentData) ? handleSwitchToAdmin : undefined}
-                    onSwitchToStaff={isStaff(enrollmentData) ? handleSwitchToStaff : undefined}
                   />
                 )}
               </div>
