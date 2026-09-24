@@ -100,6 +100,11 @@ export function PortalLoadingScreen({
                   Back to sign in
                 </button>
               )}
+              {isTakingLonger && (
+                <p className="mt-4 text-[10px] font-medium text-slate-400">
+                  Stuck? Try checking your network status.
+                </p>
+              )}
             </div>
           </>
         )}

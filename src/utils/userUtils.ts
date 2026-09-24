@@ -4,19 +4,29 @@ import { initFirebaseClient } from './firebaseClient';
 import { normalizeEmail } from './stringUtils';
 import { resolveAuthenticatedAccount } from '../services/accountResolver';
 
+import { withTimeout } from './firebaseClient';
+
 export { normalizeEmail };
 
 export const ensureUserDocument = async (firebaseUser: User) => {
   if (!firebaseUser?.uid) return null;
 
-  const resolution = await resolveAuthenticatedAccount(firebaseUser);
+  try {
+    const resolution = await withTimeout(resolveAuthenticatedAccount(firebaseUser), 25000);
 
-  if (resolution.status === 'found') {
-    return resolution.account;
-  }
+    if (resolution.status === 'found') {
+      return resolution.account;
+    }
 
-  if (resolution.status === 'conflict') {
-    throw new Error(resolution.message || "Multiple accounts share this email address. Please contact Admin.");
+    if (resolution.status === 'conflict') {
+      throw new Error(resolution.message || "Multiple accounts share this email address. Please contact Admin.");
+    }
+  } catch (err: any) {
+    if (err.message === "Firebase operation timed out") {
+       console.warn("[ensureUserDocument] Account resolution timed out, attempting to continue with local data if available...");
+    } else {
+       throw err;
+    }
   }
 
   // CASE: No existing account found for this UID or email.
@@ -84,8 +94,19 @@ export const ensureUserDocument = async (firebaseUser: User) => {
     source: "auto-created-login"
   };
 
-  await setDoc(authUserRef, initialProfile, { merge: true });
+  try {
+    await withTimeout(setDoc(authUserRef, initialProfile, { merge: true }), 10000);
+  } catch (err) {
+    console.error("[ensureUserDocument] Failed to create/update user document:", err);
+    throw new Error("Unable to initialize your profile. Please check your connection.");
+  }
 
-  const snap = await getDoc(authUserRef);
-  return { id: snap.id, ...snap.data() };
+  try {
+    const snap = await withTimeout(getDoc(authUserRef), 8000);
+    return { id: snap.id, ...snap.data() };
+  } catch (err) {
+    // If it's just a timeout on reading back, but we just wrote it, we can return the local version
+    console.warn("[ensureUserDocument] Timed out reading back user document, returning local version...");
+    return { id: authUid, ...initialProfile };
+  }
 };

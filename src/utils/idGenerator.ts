@@ -74,8 +74,14 @@ export async function generateNextSeqId(): Promise<string> {
 
   let maxNum = 1000;
   try {
-    const allUsersSnap = await getDocs(collection(db, "users"));
-    allUsersSnap.forEach(docSnap => {
+    // Only query the most recent registrations to find the highest sequence number (much faster than scanning everything)
+    const qRecent = query(
+      collection(db, "users"),
+      orderBy("created_at", "desc"),
+      limit(25)
+    );
+    const snap = await withTimeout(getDocs(qRecent), 5000);
+    snap.forEach(docSnap => {
       const d = docSnap.data();
       const idVal = d.seq_id || d.seqId || d.id_number || d.student_id;
       if (idVal) {
@@ -86,7 +92,7 @@ export async function generateNextSeqId(): Promise<string> {
       }
     });
   } catch (e) {
-    console.warn("Could not scan all users for max seq ID:", e);
+    console.warn("Could not scan recent users for max seq ID:", e);
   }
 
   let counterCount = 1000;
@@ -591,12 +597,21 @@ export async function activateExistingWithPin(
 
   const path = `users/${uid}`;
   try {
-    const querySnapshot = await withTimeout(getDocs(collection(db, "users")));
+    // Search for unlinked candidates by last name instead of scanning the whole collection
+    const qUnlinked = query(
+      collection(db, "users"),
+      where("last_name", "==", uLastName),
+      limit(50)
+    );
+    
+    const querySnapshot = await withTimeout(getDocs(qUnlinked), 8000);
     const candidates: any[] = [];
     querySnapshot.forEach(d => {
       const data = d.data();
-      const isUnlinked = !data.uid || data.uid.trim() === '';
-      if (isUnlinked) {
+      const isUnlinked = !data.uid || String(data.uid).trim() === '' || data.status === 'unlinked' || data.accountStatus === 'unlinked' || data.accountStatus === 'pending';
+      const cPin = String(data.pin || '').trim();
+      
+      if (isUnlinked && (cPin === uPin)) {
         candidates.push({ id: d.id, ...data });
       }
     });
@@ -610,6 +625,7 @@ export async function activateExistingWithPin(
     });
 
     if (!matchedRecord && uPin) {
+      // Try again with just PIN if name matching was too strict
       matchedRecord = candidates.find(c => String(c.pin || '').trim() === uPin);
     }
 

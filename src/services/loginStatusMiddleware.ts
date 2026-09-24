@@ -1,6 +1,7 @@
 import { doc, updateDoc } from 'firebase/firestore';
-import { initFirebaseClient } from '../utils/firebaseClient';
+import { initFirebaseClient, withTimeout } from '../utils/firebaseClient';
 import { User } from 'firebase/auth';
+import { isAdminLike } from '../utils/roleUtils';
 
 export interface LoginStatusCheckResult {
   shouldForcePending: boolean;
@@ -29,11 +30,8 @@ export async function runLoginStatusCheckMiddleware(
     return { shouldForcePending: true, reason: 'no_user_data' };
   }
 
-  const role = String(userData.role || userData.userRole || '').toLowerCase();
-  const isAdminOrStaff = role === 'admin' || role === 'staff' || userData.isAdmin || userData.isStaff;
-
   // Admins and Staff are exempt from student profile-setup flow unless explicitly invalid
-  if (isAdminOrStaff) {
+  if (isAdminLike(userData)) {
     return { shouldForcePending: false };
   }
 
@@ -99,11 +97,15 @@ export async function runLoginStatusCheckMiddleware(
           updatedAt: new Date().toISOString(),
         };
 
-        await updateDoc(userDocRef, patchData);
-        console.log(`[Login Status Middleware] Successfully updated user ${firebaseUser.uid} Firestore status to 'pending_profile'.`);
+        // We use a timeout but don't let a failure here block the login flow.
+        // If the write fails or times out, the user is still forced into ProfileSetup
+        // which will eventually perform the correct write when they finish the wizard.
+        await withTimeout(updateDoc(userDocRef, patchData), 10000).catch(err => {
+           console.warn('[Login Status Middleware] Background status update timed out or failed. User will proceed to profile setup locally.', err.message);
+        });
       }
-    } catch (err) {
-      console.error('[Login Status Middleware] Failed to update user status in Firestore:', err);
+    } catch (err: any) {
+      console.warn('[Login Status Middleware] Could not reach Firestore for background update:', err.message);
     }
 
     return {

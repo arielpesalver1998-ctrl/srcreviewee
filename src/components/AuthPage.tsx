@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mail, CheckCircle, RefreshCw, Loader2, LogOut, ShieldAlert, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Mail, CheckCircle, RefreshCw, Loader2, LogOut, ShieldAlert, AlertTriangle, ExternalLink, Bug } from 'lucide-react';
 import { LoginPage } from './LoginPage';
 import { SignupPage } from './SignupPage';
 import { ProfileSetup } from './ProfileSetup';
 import { ResendVerification } from './ResendVerification';
 import { GmailIcon } from './GmailIcon';
+import { FirebaseDiagnosticPanel } from './FirebaseDiagnosticPanel';
 import { auth, logout } from '../utils/auth';
-import { firestoreDb, initFirebaseClient } from '../utils/firebaseClient';
+import { firestoreDb, initFirebaseClient, withTimeout } from '../utils/firebaseClient';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { sendEmailVerification } from 'firebase/auth';
 import { activateExistingWithPin } from '../utils/idGenerator';
 import { ensureUserDocument } from '../utils/userUtils';
 import { PortalLoading } from './PortalLoading';
+import { isAdminLike } from '../utils/roleUtils';
 
 import { runLoginStatusCheckMiddleware } from '../services/loginStatusMiddleware';
 
@@ -40,12 +42,14 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [sandboxBypass, setSandboxBypass] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
+  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
+
   useEffect(() => {
     let timer: any;
     if ((checkingDoc || (initialSessionLoading && !hasCompletedInitialSessionCheck)) && !loadingError) {
       timer = setTimeout(() => {
         setIsTakingLonger(true);
-      }, 8000); // 8s timeout instead of 25s
+      }, 10000); // 10s timeout
     } else {
       setIsTakingLonger(false);
     }
@@ -184,6 +188,36 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         const resolvedUserId = resolvedProfile.id || user.uid;
         const userRef = doc(db, "users", resolvedUserId);
         
+        // Use getDoc first with a timeout to ensure we can transition the UI even if snapshot takes time
+        try {
+          const snap = await withTimeout(getDoc(userRef), 15000);
+          if (snap.exists() && !cancelled) {
+            const data: any = { id: snap.id, ...snap.data() };
+            setUserDoc(data);
+            
+            const isAdminOrStaff = isAdminLike(data);
+
+            if (data.accountStatus === 'pending_verification') {
+              setMode('verification-pending');
+            } else if (isAdminOrStaff) {
+              onSuccessRef.current(data);
+            } else {
+              // For students, the snapshot listener will handle the rest of the flow
+              // But we can check status check middleware now too
+              runLoginStatusCheckMiddleware(user, data).then((statusCheck) => {
+                if (cancelled) return;
+                if (statusCheck.shouldForcePending) {
+                  setMode('profile-setup');
+                }
+              }).catch(err => console.warn("Middleware error ignored during initial fetch:", err));
+            }
+          }
+        } catch (err) {
+          console.warn("[AuthPage] Initial getDoc timed out or failed, relying on snapshot listener...", err);
+        }
+
+        if (cancelled) return;
+
         unsubscribeUserDoc = onSnapshot(userRef, (snap) => {
           if (cancelled) return;
 
@@ -196,8 +230,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             const data: any = { id: snap.id, ...snap.data() };
             setUserDoc(data);
 
-            const role = String(data.role || "").toLowerCase();
-            const isAdminOrStaff = role === "admin" || role === "staff";
+            const isAdminOrStaff = isAdminLike(data);
 
             if (data.accountStatus === 'pending_verification') {
               setMode('verification-pending');
@@ -264,10 +297,14 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         }, (err) => {
           if (cancelled) return;
           console.error("User doc listener error:", err);
-          setCheckingDoc(true);
-          setInitialSessionLoading(false);
-          setHasCompletedInitialSessionCheck(true);
-          setLoadingError(err.message || "Failed to listen for user profile updates in Firestore.");
+          
+          // Only show error if we haven't successfully loaded a document yet
+          if (!userDoc) {
+             setCheckingDoc(true);
+             setInitialSessionLoading(false);
+             setHasCompletedInitialSessionCheck(true);
+             setLoadingError(err.message || "Failed to listen for user profile updates in Firestore.");
+          }
         });
       } catch (e: any) {
         if (cancelled) return;
@@ -380,27 +417,41 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   if ((initialSessionLoading && !hasCompletedInitialSessionCheck && checkingDoc) || checkingDoc) {
     const isRestoring = initialSessionLoading && !hasCompletedInitialSessionCheck;
     return (
-      <PortalLoading
-        message={isRestoring ? "Restoring Your Session" : "Waiting to Log In"}
-        subMessage="Please wait, Future RCrim."
-        status={isRestoring ? "Checking your portal access…" : "Preparing your portal…"}
-        isTakingLonger={isTakingLonger}
-        error={loadingError}
-        onRetry={() => {
-          setIsTakingLonger(false);
-          setLoadingError(null);
-          setRetryCount((prev) => prev + 1);
-        }}
-        onBackToLogin={async () => {
-          await logout();
-          setIsTakingLonger(false);
-          setLoadingError(null);
-          setCheckingDoc(false);
-          setInitialSessionLoading(false);
-          setHasCompletedInitialSessionCheck(true);
-          setMode('login');
-        }}
-      />
+      <>
+        <PortalLoading
+          message={isRestoring ? "Restoring Your Session" : "Waiting to Log In"}
+          subMessage="Please wait, Future RCrim."
+          status={isRestoring ? "Checking your portal access…" : "Preparing your portal…"}
+          isTakingLonger={isTakingLonger}
+          error={loadingError}
+          onRetry={() => {
+            setIsTakingLonger(false);
+            setLoadingError(null);
+            setRetryCount((prev) => prev + 1);
+          }}
+          onBackToLogin={async () => {
+            await logout();
+            setIsTakingLonger(false);
+            setLoadingError(null);
+            setCheckingDoc(false);
+            setInitialSessionLoading(false);
+            setHasCompletedInitialSessionCheck(true);
+            setMode('login');
+          }}
+        />
+        {isTakingLonger && (
+          <div className="fixed bottom-10 left-0 right-0 z-[10000] flex justify-center px-4 pointer-events-none">
+            <button
+              onClick={() => setIsDiagnosticsOpen(true)}
+              className="pointer-events-auto flex items-center gap-2 px-4 py-2 bg-slate-800/90 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl hover:bg-slate-900 transition-all cursor-pointer border border-slate-700"
+            >
+              <Bug size={12} />
+              Open Network Diagnostics
+            </button>
+          </div>
+        )}
+        <FirebaseDiagnosticPanel isOpen={isDiagnosticsOpen} onClose={() => setIsDiagnosticsOpen(false)} />
+      </>
     );
   }
 

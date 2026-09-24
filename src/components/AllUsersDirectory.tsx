@@ -461,8 +461,8 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
             </p>
             {scanResult.healedUsers.length > 0 && (
               <div className="mt-2 pt-2 border-t border-emerald-200/80 flex flex-wrap gap-2 text-[11px] text-emerald-900">
-                {scanResult.healedUsers.map((u) => (
-                  <span key={u.id} className="bg-white/80 px-2.5 py-1 rounded-lg border border-emerald-200 font-bold">
+                {scanResult.healedUsers.map((u, idx) => (
+                  <span key={`${u.id || 'u'}_${idx}`} className="bg-white/80 px-2.5 py-1 rounded-lg border border-emerald-200 font-bold">
                     {u.name} (ID: {u.seqId})
                   </span>
                 ))}

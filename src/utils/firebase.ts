@@ -4,6 +4,7 @@ import {
   initializeFirestore, 
   getFirestore, 
   memoryLocalCache,
+  setLogLevel,
   type Firestore 
 } from "firebase/firestore";
 import { getAuth, type Auth } from "firebase/auth";
@@ -68,26 +69,32 @@ try {
     app = getApps().length > 0 ? getApp() : initializeApp(config);
     auth = getAuth(app);
     
-    // Initialize Firestore once with recommended settings
-    const forceLongPolling = typeof import.meta !== 'undefined' && import.meta.env 
-      ? import.meta.env.VITE_FIRESTORE_FORCE_LONG_POLLING === "true" 
-      : (typeof process !== 'undefined' && process.env?.VITE_FIRESTORE_FORCE_LONG_POLLING === "true");
+    // Initialize Firestore once with recommended settings for AI Studio environment
+    const useLongPolling = true;
     
     try {
       db = initializeFirestore(app, {
         localCache: memoryLocalCache(),
         ignoreUndefinedProperties: true,
-        ...(forceLongPolling 
-          ? { experimentalForceLongPolling: true } 
-          : { experimentalAutoDetectLongPolling: true })
+        experimentalForceLongPolling: useLongPolling,
       });
-      console.info(`Firestore initialized with ${forceLongPolling ? 'force' : 'auto-detect'} long polling.`);
+      
+      console.info("Firestore initialized with long polling optimization.");
     } catch (error: any) {
-      if (error.code === 'failed-precondition') {
+      if (error.code === 'failed-precondition' || error.message?.includes('already exists')) {
         db = getFirestore(app);
-        console.warn("Firestore already initialized, reusing instance.");
+        console.warn("Reusing existing Firestore instance.");
       } else {
         console.error("Firestore initialization failed:", error);
+        // Fallback to standard initialization if experimental fails
+        try {
+           db = initializeFirestore(app, {
+             experimentalAutoDetectLongPolling: true,
+             ignoreUndefinedProperties: true
+           });
+        } catch (innerErr) {
+           db = getFirestore(app);
+        }
       }
     }
     

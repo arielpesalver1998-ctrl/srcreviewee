@@ -12,7 +12,7 @@ import {
   where, 
   writeBatch 
 } from 'firebase/firestore';
-import { initFirebaseClient } from '../utils/firebaseClient';
+import { initFirebaseClient, withTimeout } from '../utils/firebaseClient';
 import { normalizeEmail } from '../utils/stringUtils';
 
 export { normalizeEmail };
@@ -60,17 +60,20 @@ export async function findAccountsByEmail(email: string): Promise<any[]> {
     query(collection(db, "users"), where("email", "==", cleanEmail), limit(10))
   ];
 
-  for (const q of queries) {
-    try {
-      const snap = await getDocs(q);
+  try {
+    const snapshots = await Promise.all(
+      queries.map(q => withTimeout(getDocs(q), 10000))
+    );
+
+    snapshots.forEach(snap => {
       snap.docs.forEach(docSnap => {
         if (!accountsMap.has(docSnap.id)) {
           accountsMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data(), _ref: docSnap.ref });
         }
       });
-    } catch (err) {
-      console.warn("[AccountResolver] Query error finding accounts by email:", err);
-    }
+    });
+  } catch (err) {
+    console.warn("[AccountResolver] Query error finding accounts by email:", err);
   }
 
   return Array.from(accountsMap.values());
@@ -86,9 +89,9 @@ export async function findAccountByUid(uid: string): Promise<any | null> {
   if (!db) throw new Error("Firestore database is not initialized.");
 
   const userRef = doc(db, "users", uid);
-  const snap = await getDoc(userRef);
+  const snap = await withTimeout(getDoc(userRef), 8000).catch(() => null);
 
-  if (snap.exists()) {
+  if (snap && snap.exists()) {
     return { id: snap.id, ...snap.data(), _ref: userRef };
   }
   return null;
@@ -135,7 +138,9 @@ export async function resolveAuthenticatedAccount(firebaseUser: User): Promise<A
       updatedPayload.googleProvider = true;
     }
 
-    await setDoc(doc(db, "users", firebaseUser.uid), updatedPayload, { merge: true });
+    await withTimeout(setDoc(doc(db, "users", firebaseUser.uid), updatedPayload, { merge: true }), 8000).catch(err => {
+      console.warn("[AccountResolver] Non-critical metadata update timed out/failed:", err);
+    });
 
     return {
       status: 'found',
@@ -225,7 +230,12 @@ export async function resolveAuthenticatedAccount(firebaseUser: User): Promise<A
       batch.set(existingRef, updatePayload, { merge: true });
     }
 
-    await batch.commit();
+    try {
+      await withTimeout(batch.commit(), 10000);
+    } catch (err) {
+      console.warn("[AccountResolver] Consolidating account commit timed out/failed:", err);
+      // Fallback: return the existing account data even if sync failed
+    }
 
     const finalAccount = {
       ...existingAccount,

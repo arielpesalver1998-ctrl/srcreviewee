@@ -18,13 +18,38 @@ type FirebaseErrorLog = {
 let globalErrorListeners: ((error: FirebaseErrorLog) => void)[] = [];
 
 export function logFirebaseError(error: any, type: FirebaseErrorLog['type'] = 'general') {
+  let safeDetails = '';
+  try {
+    if (error?.stack) {
+      safeDetails = error.stack;
+    } else if (typeof error === 'object' && error !== null) {
+      // Safely extract known properties to avoid circular references in JSON.stringify
+      const safeObj: any = {};
+      Object.getOwnPropertyNames(error).forEach(key => {
+        const val = error[key];
+        if (typeof val !== 'function' && typeof val !== 'object') {
+          safeObj[key] = val;
+        } else if (val === null) {
+          safeObj[key] = null;
+        } else {
+          safeObj[key] = `[${typeof val}]`;
+        }
+      });
+      safeDetails = JSON.stringify(safeObj, null, 2);
+    } else {
+      safeDetails = String(error);
+    }
+  } catch (e) {
+    safeDetails = 'Error details could not be serialized.';
+  }
+
   const errLog: FirebaseErrorLog = {
     id: Math.random().toString(36).substring(2, 9),
     timestamp: new Date().toLocaleTimeString(),
     type,
     code: error?.code || error?.name,
     message: String(error?.message || error || 'Unknown error'),
-    details: error?.stack || JSON.stringify(error, null, 2)
+    details: safeDetails
   };
   
   console.error(`[Firebase Diagnostic Capture] [${type.toUpperCase()}]`, error);

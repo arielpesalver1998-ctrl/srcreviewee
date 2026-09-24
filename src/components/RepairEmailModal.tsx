@@ -151,7 +151,7 @@ export const RepairEmailModal = ({ isOpen, onClose }: { isOpen: boolean; onClose
                       <p className="text-slate-500 text-[10px]">Used by {dup.count} records</p>
                       <ul className="list-disc pl-4 mt-1 text-[10px] text-slate-600">
                         {dup.users.map((u: any, idx: number) => (
-                          <li key={idx}>{u.data.first_name} {u.data.last_name} ({u.data.role || 'Reviewee'})</li>
+                          <li key={`${u.id || u.uid || 'u'}_${idx}`}>{u.data.first_name} {u.data.last_name} ({u.data.role || 'Reviewee'})</li>
                         ))}
                       </ul>
                     </div>

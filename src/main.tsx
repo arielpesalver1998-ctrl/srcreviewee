@@ -75,7 +75,8 @@ const cleanQuotaLogs = (originalFn: (...args: any[]) => void) => {
                                 lowerStr.includes('could not reach') ||
                                 lowerStr.includes('resizeobserver') ||
                                 lowerStr.includes('undelivered notifications') ||
-                                lowerStr.includes('script error');
+                                lowerStr.includes('script error') ||
+                                lowerStr.includes('maximum backoff delay');
 
     if (args[0] && typeof args[0] === 'string' && args[0].includes('BloomFilter error')) {
       return;

@@ -17,7 +17,6 @@ import type { RevieweeData } from '../types';
 import { parseScores } from '../utils/scoreParser';
 import { getUserRole, isAdmin, isStaff, isReviewee, isAdminLike } from '../utils/roleUtils';
 import { getDisplayIdNumber } from '../utils/idResolver';
-import { useFirestoreUsers } from '../hooks/useFirestoreUsers';
 import { useNotifications } from '../hooks/useNotifications';
 import { firestoreDb } from '../utils/firebaseClient';
 import { MyScoresPage } from './reviewee/MyScoresPage';
@@ -85,7 +84,6 @@ export function RevieweePortal({
     return localStorage.getItem('reviewee_active_tab') || 'dashboard';
   });
   const [showAdminFolderModal, setShowAdminFolderModal] = useState(false);
-  const { allUsers } = useFirestoreUsers();
   const { notifications } = useNotifications(firestoreDb, data.uid || "");
   
   const unreadCount = useMemo(() => notifications.filter(n => !n.isRead).length, [notifications]);
@@ -164,60 +162,15 @@ export function RevieweePortal({
     return Number((areaScores.reduce((sum, val) => sum + val, 0) / subjects.length).toFixed(1));
   }, [revieweeData, gradeWeights]);
   
-  // Calculate dynamic rank for this specific reviewee among all reviewees
+  // Calculate dynamic rank for this specific reviewee
   const rankInfo = useMemo(() => {
-    if (!allUsers || allUsers.length === 0 || scores.length === 0) {
-      return { rank: "0", subtitle: "No scores yet", topPercent: null };
-    }
-
-    const revieweesList = allUsers.filter((u: any) => getUserRole(u) === "Reviewee");
-    
-    // Calculate average for each reviewee
-    const ranked = revieweesList.map((u: any) => {
-      const subjects: SubjectArea[] = ["clj", "lea", "cdi", "fs", "crim", "ca"];
-      const areaScores = subjects.map(subj => {
-        return calculateRevieweeArea(u, subj, gradeWeights).percentage;
-      });
-      const uAvg = areaScores.reduce((sum, val) => sum + val, 0) / subjects.length;
-      const count = subjects.reduce((sum, subj) => {
-        const categories: GradeCategoryKey[] = ["preboard", "pretest", "posttest", "quiz", "dailyEvaluation", "removal", "diagnostic"];
-        const actualCount = categories.reduce((c, cat) => getResolvedScore(u, cat, subj) !== null ? c + 1 : c, 0);
-        return sum + actualCount;
-      }, 0);
-      const uSeq = u.seq_id || u.seqId || u.srcId || u.id_number || u.uid || u.id;
-      return {
-        uid: u.uid || u.id,
-        seqId: uSeq,
-        avg: uAvg,
-        count
-      };
-    }).filter(u => u.count > 0);
-
-    ranked.sort((a, b) => b.avg - a.avg);
-
-    const rData = revieweeData as any;
-    const currentSeq = rData.seq_id || rData.seqId || rData.srcId || rData.id_number || rData.uid || rData.id;
-    const currentUid = rData.uid || rData.id;
-
-    const idx = ranked.findIndex(r => 
-      (currentUid && r.uid === currentUid) || 
-      (currentSeq && r.seqId === currentSeq)
-    );
-
-    if (idx === -1) {
-      return { rank: "0", subtitle: `Out of ${revieweesList.length} Reviewees`, topPercent: null };
-    }
-
-    const rankNum = idx + 1;
-    const total = ranked.length;
-    const percentile = Math.max(1, Math.round((rankNum / total) * 100));
-
-    return {
-      rank: `#${rankNum}`,
-      subtitle: `Out of ${total} Evaluated Reviewees`,
-      topPercent: percentile <= 20 ? `Top ${percentile}% of Batch` : `Ranked ${rankNum} of ${total}`
+    // Ranking is temporarily disabled for performance reasons (was scanning all users)
+    return { 
+      rank: "—", 
+      subtitle: "Ranking TBD", 
+      topPercent: "Performance tracked" 
     };
-  }, [allUsers, revieweeData, scores, gradeWeights]);
+  }, [revieweeData, scores]);
 
   // Calculate dynamic course progress for this specific reviewee
   const progressInfo = useMemo(() => {

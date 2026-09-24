@@ -871,15 +871,19 @@ export function RegistrationForm({ onSuccess }: RegistrationFormProps) {
             </motion.div>
           )}
           
-          {/* Suggestions List */}
+          {/* Suggestions List with Live-Filter Search */}
           {showSuggestions && officialNames.filter(s => s.toLowerCase().includes(schoolName.toLowerCase())).length > 0 && (
-            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="absolute z-50 top-full mt-1 w-full bg-white rounded-xl shadow-lg border border-slate-100 py-2 max-h-56 overflow-auto shadow-2xl">
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="absolute z-50 top-full mt-1 w-full bg-white rounded-2xl shadow-2xl border border-slate-200/80 py-2 max-h-64 overflow-auto">
+              <div className="px-3 py-1.5 text-[10px] font-black uppercase text-teal-700 bg-teal-50/80 border-b border-slate-100 mb-1 flex items-center justify-between">
+                <span>Official Verified Institutions</span>
+                <span className="text-[9px] font-bold text-slate-500">Live Search</span>
+              </div>
               {officialNames.filter(s => s.toLowerCase().includes(schoolName.toLowerCase())).map(school => (
                 <button
                   key={school}
                   type="button"
                   onMouseDown={(e) => {
-                    e.preventDefault(); // Prevent onBlur from hiding it immediately
+                    e.preventDefault();
                     setSchoolName(school);
                     setShowSuggestions(false);
                   }}
@@ -887,9 +891,10 @@ export function RegistrationForm({ onSuccess }: RegistrationFormProps) {
                     setSchoolName(school);
                     setShowSuggestions(false);
                   }}
-                  className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors whitespace-nowrap"
+                  className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-800 hover:bg-teal-50/60 hover:text-teal-900 transition-colors flex items-center justify-between group"
                 >
-                  {school}
+                  <span className="truncate pr-2">{school}</span>
+                  <CheckCircle2 size={14} className="text-emerald-500 shrink-0 opacity-70 group-hover:opacity-100" />
                 </button>
               ))}
             </motion.div>

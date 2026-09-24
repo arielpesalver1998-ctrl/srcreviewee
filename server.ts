@@ -50,7 +50,8 @@ const cleanQuotaLogs = (originalFn: (...args: any[]) => void) => {
                     lowerStr.includes('quota_exceeded') ||
                     lowerStr.includes('cancelling stream') ||
                     lowerStr.includes('disconnecting idle stream') ||
-                    lowerStr.includes('timed out waiting for new targets');
+                    lowerStr.includes('timed out waiting for new targets') ||
+                    lowerStr.includes('maximum backoff delay');
 
     if (args[0] && typeof args[0] === 'string' && args[0].includes('BloomFilter error')) {
       return;
@@ -298,10 +299,14 @@ async function startServer() {
     try {
       firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
       const dbId = firebaseConfig.firestoreDatabaseId;
-      firestoreDb = dbId 
-        ? initializeFirestore(firebaseApp, { experimentalForceLongPolling: true }, dbId) 
-        : initializeFirestore(firebaseApp, { experimentalForceLongPolling: true });
-      console.log("Firebase and Firestore successfully initialized based on configuration.");
+      
+      // Initialize with long polling for proxy compatibility
+      firestoreDb = initializeFirestore(firebaseApp, { 
+        experimentalForceLongPolling: true,
+        ignoreUndefinedProperties: true
+      }, dbId || undefined);
+      
+      console.log(`Firebase and Firestore initialized successfully${dbId ? ' for database: ' + dbId : ''}.`);
     } catch (dbInitErr: any) {
       dbInitErrorMessage = dbInitErr?.message || "Unknown dbInitErr";
       console.error("CRITICAL error initializing Firebase / Firestore:", dbInitErr);

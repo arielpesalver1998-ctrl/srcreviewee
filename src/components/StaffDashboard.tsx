@@ -32,7 +32,7 @@ import { VenueQRPage } from './VenueQRPage';
 import { StatCard } from './DashboardKit';
 import { PortalLayout } from './PortalLayout';
 import { ProfileDashboard } from './ProfileDashboard';
-import { deduplicateUsersByIdNumber } from '../services/userIdentityResolver';
+import { deduplicateUsersByIdNumber, getUserAccountStatus } from '../services/userIdentityResolver';
 import { logProfileModification } from '../services/activityLogService';
 
 interface StaffDashboardProps {
@@ -78,8 +78,15 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
   };
 
   const metrics = useMemo(() => {
-    const validUsers = deduplicateUsersByIdNumber(allUsers).filter(u => !u.isDeleted && !u.deleted && u.accountStatus !== 'deleted');
-    const reviewees = validUsers.filter(u => getUserRole(u) === 'Reviewee');
+    const validUsers = deduplicateUsersByIdNumber(allUsers).filter(u => {
+      const status = getUserAccountStatus(u);
+      return status !== 'merged' && status !== 'deleted';
+    });
+    const reviewees = validUsers.filter(u => {
+      const r = getUserRole(u).toLowerCase();
+      return r !== 'admin' && r !== 'staff';
+    });
+    const activeReviewees = reviewees.filter(u => getUserAccountStatus(u) === 'active');
     const publishedFolders = folders.filter(f => !f.isArchived && f.publicationStatus !== 'hidden');
 
     let totalScoresCount = 0;
@@ -97,9 +104,10 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
 
     return {
       totalReviewees: reviewees.length,
+      activeReviewees: activeReviewees.length,
       publishedFolders: publishedFolders.length,
       totalScoresCount,
-      recentReviewees: reviewees.slice(-6).reverse(),
+      recentReviewees: activeReviewees.slice(-6).reverse(),
     };
   }, [allUsers, folders]);
 
@@ -268,8 +276,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
             {/* Staff Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
               <StatCard
-                label="Registered Reviewees"
-                value={String(metrics.totalReviewees)}
+                label="Active Reviewees"
+                value={String(metrics.activeReviewees)}
                 icon={<GraduationCap size={18} />}
                 tone="blue"
                 subtitle="Active student accounts"
@@ -384,11 +392,11 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200/80 font-medium text-slate-700">
-                    {metrics.recentReviewees.map((u: any) => {
+                    {metrics.recentReviewees.map((u: any, idx: number) => {
                       const name = [u.first_name || u.firstName, u.last_name || u.lastName].filter(Boolean).join(' ') || u.displayName || u.email;
                       const seq = u.seq_id || u.seqId || u.id_number || '—';
                       return (
-                        <tr key={u.uid || u.id} className="hover:bg-blue-50/20 divide-x divide-slate-200/70 transition-colors">
+                        <tr key={`${u.uid || u.id || 'u'}_${idx}`} className="hover:bg-blue-50/20 divide-x divide-slate-200/70 transition-colors">
                           <td className="py-3 px-3.5 font-bold text-slate-900 flex items-center gap-2 whitespace-nowrap">
                             <UserAvatar photoURL={u.photoURL || u.photo_url} altText={name} size={24} className="rounded-full shrink-0" />
                             <span className="whitespace-nowrap">{name}</span>

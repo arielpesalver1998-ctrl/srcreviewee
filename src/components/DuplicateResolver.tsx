@@ -21,6 +21,7 @@ import {
   formatFormalName,
   canonicalizeIdNumber,
   getUserAccountStatus,
+  deduplicateUsersByIdNumber,
 } from '../services/userIdentityResolver';
 import { getUserRole } from '../utils/roleUtils';
 import { UserAvatar } from './UserAvatar';
@@ -42,11 +43,16 @@ export const DuplicateResolver: React.FC<DuplicateResolverProps> = ({
 
   // Analyze records based on the chosen scope
   const analysis = useMemo(() => {
-    // 1. Filter target population based on scope
-    const targetUsers = allUsers.filter((u) => {
+    // 1. Filter target population based on scope using canonical deduplication and robust reviewee check
+    const validUsers = deduplicateUsersByIdNumber(allUsers).filter(u => {
       const status = getUserAccountStatus(u);
-      const role = getUserRole(u);
-      const isReviewee = role === 'Reviewee';
+      return status !== 'merged' && status !== 'deleted';
+    });
+
+    const targetUsers = validUsers.filter((u) => {
+      const status = getUserAccountStatus(u);
+      const role = getUserRole(u).toLowerCase();
+      const isReviewee = role !== 'admin' && role !== 'staff';
 
       if (filterScope === 'active_reviewees') {
         return isReviewee && status === 'active';

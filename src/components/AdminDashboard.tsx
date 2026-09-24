@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   LayoutDashboard,
   FolderSync,
@@ -51,7 +51,7 @@ import { StatCard } from './DashboardKit';
 import { PortalLayout } from './PortalLayout';
 import { ProfileDashboard } from './ProfileDashboard';
 import { downloadRegisteredUsersCsv } from '../utils/exportUsersCsv';
-import { deduplicateUsersByIdNumber } from '../services/userIdentityResolver';
+import { deduplicateUsersByIdNumber, getUserAccountStatus } from '../services/userIdentityResolver';
 import { DuplicateResolver } from './DuplicateResolver';
 import { ActivityLogTab } from './ActivityLogTab';
 import { logProfileModification } from '../services/activityLogService';
@@ -109,6 +109,69 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [scoreContextMode, setScoreContextMode] = useState<'single' | 'combined'>('single');
   const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
 
+  const [officialSchools, setOfficialSchools] = useState<string[]>([]);
+  const [schoolMappings, setSchoolMappings] = useState<Record<string, string>>({});
+  const [schoolSearchQuery, setSchoolSearchQuery] = useState('');
+  const [newSchoolInput, setNewSchoolInput] = useState('');
+  const [schoolNotice, setSchoolNotice] = useState<string | null>(null);
+  const [savingSchools, setSavingSchools] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/school-mappings')
+      .then(res => res.json())
+      .then(data => {
+        if (data) {
+          if (data.officialNames) setOfficialSchools(data.officialNames);
+          if (data.mappings) setSchoolMappings(data.mappings);
+        }
+      })
+      .catch(err => console.warn('Failed to load school mappings:', err));
+  }, []);
+
+  const handleAddOfficialSchool = () => {
+    const trimmed = newSchoolInput.trim().toUpperCase();
+    if (!trimmed) return;
+    if (officialSchools.includes(trimmed)) {
+      alert('School is already in the official verified list.');
+      return;
+    }
+    setOfficialSchools([...officialSchools, trimmed]);
+    setNewSchoolInput('');
+  };
+
+  const handleDeleteOfficialSchool = (schoolName: string) => {
+    if (confirm(`Remove "${schoolName}" from official verified schools?`)) {
+      setOfficialSchools(officialSchools.filter(s => s !== schoolName));
+    }
+  };
+
+  const handleSaveSchoolData = async () => {
+    setSavingSchools(true);
+    setSchoolNotice(null);
+    try {
+      const res = await fetch('/api/school-mappings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          officialNames: officialSchools,
+          mappings: schoolMappings,
+          abbreviations: {}
+        })
+      });
+      if (res.ok) {
+        setSchoolNotice('School management list & official verified names updated successfully!');
+        setTimeout(() => setSchoolNotice(null), 5000);
+      } else {
+        const errData = await res.json();
+        alert(errData.error || 'Failed to update school management data.');
+      }
+    } catch (err: any) {
+      alert(`Error saving school data: ${err.message || err}`);
+    } finally {
+      setSavingSchools(false);
+    }
+  };
+
   const handleDownloadUsersCsv = async () => {
     setIsExportingCsv(true);
     try {
@@ -143,10 +206,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Analytics & Metrics
   const metrics = useMemo(() => {
-    const validUsers = deduplicateUsersByIdNumber(allUsers).filter(u => !u.isDeleted && !u.deleted && u.accountStatus !== 'deleted');
-    const reviewees = validUsers.filter(u => getUserRole(u) === 'Reviewee');
-    const staff = validUsers.filter(u => getUserRole(u) === 'Staff');
-    const admins = validUsers.filter(u => getUserRole(u) === 'Admin');
+    const validUsers = deduplicateUsersByIdNumber(allUsers).filter(u => {
+      const status = getUserAccountStatus(u);
+      return status !== 'merged' && status !== 'deleted';
+    });
+    const reviewees = validUsers.filter(u => {
+      const r = getUserRole(u).toLowerCase();
+      return r !== 'admin' && r !== 'staff';
+    });
+    const activeReviewees = reviewees.filter(u => getUserAccountStatus(u) === 'active');
+    const staff = validUsers.filter(u => getUserRole(u).toLowerCase() === 'staff');
+    const admins = validUsers.filter(u => getUserRole(u).toLowerCase() === 'admin');
 
     const publishedFolders = folders.filter(f => !f.isArchived && f.publicationStatus !== 'hidden');
     const totalFolders = folders.length;
@@ -168,12 +238,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return {
       totalUsers: validUsers.length,
       totalReviewees: reviewees.length,
+      activeReviewees: activeReviewees.length,
       totalStaff: staff.length,
       totalAdmins: admins.length,
       publishedFolders: publishedFolders.length,
       totalFolders,
       totalScoresCount,
-      recentReviewees: reviewees.slice(-6).reverse(),
+      recentReviewees: activeReviewees.slice(-6).reverse(),
     };
   }, [allUsers, folders]);
 
@@ -264,7 +335,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     { key: 'scores', label: 'Score Management', icon: <ClipboardList size={18} /> },
     { key: 'archives', label: 'Archives', icon: <FolderArchive size={18} /> },
     { key: 'leaderboard', label: 'Leaderboard', icon: <Trophy size={18} /> },
-    { key: 'school-mappings', label: 'School Mappings', icon: <GraduationCap size={18} /> },
+    { key: 'school-mappings', label: 'School Management', icon: <GraduationCap size={18} /> },
     { key: 'duplicate-resolver', label: 'Duplicate Resolver', icon: <Users2 size={18} /> },
     { key: 'activity-log', label: 'Activity Log', icon: <Activity size={18} /> },
     { key: 'grades', label: 'Grade Weights', icon: <Sliders size={18} /> },
@@ -370,8 +441,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {/* KPI Metric Cards */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
                 <StatCard
-                  label="Total Reviewees"
-                  value={String(metrics.totalReviewees || 170)}
+                  label="Active Reviewees"
+                  value={String(metrics.activeReviewees)}
                   icon={<GraduationCap size={18} />}
                   tone="teal"
                   subtitle={`Out of ${metrics.totalUsers} registered`}
@@ -700,30 +771,105 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* SCHOOL MAPPINGS TAB */}
         {activeTab === 'school-mappings' && (
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-4 sm:p-6 shadow-sm">
-            <div className="mb-4">
-              <h2 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
-                <GraduationCap className="text-teal-600" size={22} /> School & University Distribution
-              </h2>
-              <p className="text-xs text-slate-500 font-medium mt-1">
-                Enrolled examinees organized by tertiary alma mater and educational institution.
-              </p>
+          <div className="bg-white border border-slate-200/80 rounded-3xl p-4 sm:p-6 shadow-sm space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
+                  <GraduationCap className="text-teal-600" size={22} /> School Management & Verified Institutions
+                </h2>
+                <p className="text-xs text-slate-500 font-medium mt-1">
+                  Define official verified school names and spelling mappings to prevent reviewees from selecting non-existent or misspelled institutions.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveSchoolData}
+                disabled={savingSchools}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-md transition-all disabled:opacity-50"
+              >
+                {savingSchools ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                Save Changes & Apply Mappings
+              </button>
             </div>
+
+            {schoolNotice && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-xs font-bold flex items-center gap-2">
+                <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                {schoolNotice}
+              </div>
+            )}
+
+            {/* ADD NEW OFFICIAL SCHOOL */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">Add Official Verified School</h3>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Enter full official school name (e.g. UNIVERSITY OF THE PHILIPPINES)..."
+                  value={newSchoolInput}
+                  onChange={(e) => setNewSchoolInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddOfficialSchool(); } }}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddOfficialSchool}
+                  className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow transition-all"
+                >
+                  Add School
+                </button>
+              </div>
+            </div>
+
+            {/* SEARCH & FILTER */}
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                placeholder="Search official verified schools..."
+                value={schoolSearchQuery}
+                onChange={(e) => setSchoolSearchQuery(e.target.value)}
+                className="w-full sm:w-80 px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              />
+              <span className="text-xs text-slate-500 font-bold whitespace-nowrap">
+                {officialSchools.length} Official Schools Registered
+              </span>
+            </div>
+
+            {/* OFFICIAL SCHOOLS GRID */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {Array.from(new Set(allUsers.map((u: any) => u.school).filter(Boolean))).map((schoolName, sIdx) => {
-                const count = allUsers.filter((u: any) => u.school === schoolName).length;
-                return (
-                  <div key={sIdx} className="p-4 rounded-2xl bg-slate-50 border border-slate-200/70 flex justify-between items-center">
-                    <div className="min-w-0 pr-3">
-                      <p className="text-xs font-bold text-slate-900 truncate">{String(schoolName)}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Samaritan Reviewee Partner</p>
+              {officialSchools
+                .filter(s => s.toLowerCase().includes(schoolSearchQuery.toLowerCase()))
+                .map((schoolName, sIdx) => {
+                  const studentCount = allUsers.filter((u: any) => {
+                    const uSchool = String(u.school || u.school_name || '').trim().toUpperCase();
+                    return uSchool === schoolName || schoolMappings[uSchool] === schoolName;
+                  }).length;
+                  return (
+                    <div key={sIdx} className="p-4 rounded-2xl bg-slate-50 border border-slate-200/70 flex flex-col justify-between gap-3">
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-xs font-bold text-slate-900 leading-snug">{schoolName}</p>
+                          <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
+                            Verified
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          {studentCount} {studentCount === 1 ? 'student enrolled' : 'students enrolled'}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
+                        <span className="text-[10px] text-teal-700 font-bold">Official Institution</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteOfficialSchool(schoolName)}
+                          className="text-rose-600 hover:text-rose-800 text-[11px] font-bold transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
-                    <span className="shrink-0 px-2.5 py-1 rounded-full bg-teal-100 text-teal-800 font-black text-xs">
-                      {count} {count === 1 ? 'student' : 'students'}
-                    </span>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           </div>
         )}
