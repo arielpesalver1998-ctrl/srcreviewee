@@ -111,6 +111,10 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
       const docRef = doc(firestoreDb, "users", targetId);
       const cleanSeqId = String(updatedData.seqId || updatedData.seq_id || '').trim().toUpperCase();
 
+      const targetStatus = updatedData.status === 'pending' ? 'pending_profile' : (updatedData.status || updatedData.accountStatus || 'active');
+      const isPending = targetStatus === 'pending_profile' || targetStatus === 'pending';
+      const isDropped = targetStatus === 'dropped';
+
       await updateDoc(docRef, {
         firstName: updatedData.firstName || '',
         first_name: (updatedData.firstName || '').toUpperCase(),
@@ -123,8 +127,15 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
         userRole: updatedData.role || 'Reviewee',
         seqId: cleanSeqId,
         seq_id: cleanSeqId,
-        status: updatedData.status || updatedData.accountStatus || 'active',
-        accountStatus: updatedData.status || updatedData.accountStatus || 'active',
+        idNumber: cleanSeqId,
+        id_number: cleanSeqId,
+        srcId: cleanSeqId,
+        src_id: cleanSeqId,
+        studentId: cleanSeqId,
+        student_id: cleanSeqId,
+        status: targetStatus,
+        accountStatus: targetStatus,
+        profileCompleted: isPending ? false : isDropped ? false : true,
         updatedAt: new Date().toISOString(),
       });
       setActionNotice(`Reviewee ${updatedData.firstName} ${updatedData.lastName} updated successfully.`);

@@ -13,6 +13,8 @@ export function getDisplayIdNumber(
     profile.seq_id ||
     profile.idNumber ||
     profile.id_number ||
+    profile.srcId ||
+    profile.src_id ||
     profile.adminId ||
     profile.staffId ||
     profile.employeeId ||

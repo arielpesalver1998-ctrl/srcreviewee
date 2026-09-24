@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mail, CheckCircle, RefreshCw, Loader2, LogOut, ShieldAlert, AlertTriangle, ExternalLink } from 'lucide-react';
 import { LoginPage } from './LoginPage';
@@ -230,6 +230,12 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             const isGoogleUser = user.providerData?.some(p => p.providerId === 'google.com') || data.registrationMethod === 'google' || data.authProvider === 'google';
             const isManualUser = data.registrationMethod === 'manual' || data.authProvider === 'password' || !isGoogleUser;
 
+            // Manual signups must verify their email address before accessing profile setup or dashboard
+            if (isManualUser && !user.emailVerified && !sandboxBypassRef.current) {
+              setMode('email-verification-pending');
+              return;
+            }
+
             const isMergedOrUnknown = data.status === 'merged' || data.status === 'unknown' || data.accountStatus === 'merged' || data.accountStatus === 'unknown';
 
             const profileCompleted = data.profileCompleted === true && hasSeqId && hasName && hasSchool && hasBranch && data.accountStatus === 'active' && !isMergedOrUnknown;
@@ -237,11 +243,6 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             // CRITICAL: Complete Your Profile card must be shown to users whose profile setup has not completed or has merged/unknown/pending status
             if (!profileCompleted || isMergedOrUnknown || data.accountStatus === 'pending_profile' || data.status === 'pending_profile' || !hasSeqId || !hasName || !hasSchool || !hasBranch) {
               setMode('profile-setup');
-              return;
-            }
-
-            if (isManualUser && !user.emailVerified && !sandboxBypassRef.current) {
-              setMode('email-verification-pending');
               return;
             }
 
@@ -364,38 +365,47 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     setEmailMsg(null);
   };
 
-  // Construct smart prefilled data for ProfileSetup
-  const rawDisplayName = userDoc?.displayName || currentUser?.displayName || '';
-  let parsedFirst = userDoc?.firstName || userDoc?.first_name || '';
-  let parsedMiddle = userDoc?.middleName || userDoc?.middle_name || '';
-  let parsedLast = userDoc?.lastName || userDoc?.last_name || '';
+  // Construct smart prefilled data for ProfileSetup (ignoring raw emails or placeholder UNKNOWN USER strings)
+  const initialSetupData = useMemo(() => {
+    const rawDisplayName = String(userDoc?.displayName || currentUser?.displayName || '').trim();
+    let parsedFirst = String(userDoc?.firstName || userDoc?.first_name || '').trim();
+    let parsedMiddle = String(userDoc?.middleName || userDoc?.middle_name || '').trim();
+    let parsedLast = String(userDoc?.lastName || userDoc?.last_name || '').trim();
 
-  if ((!parsedFirst || !parsedLast) && rawDisplayName) {
-    const parts = rawDisplayName.trim().split(/\s+/);
-    if (parts.length === 1) {
-      if (!parsedFirst) parsedFirst = parts[0];
-    } else if (parts.length === 2) {
-      if (!parsedFirst) parsedFirst = parts[0];
-      if (!parsedLast) parsedLast = parts[1];
-    } else if (parts.length === 3) {
-      if (!parsedFirst) parsedFirst = parts[0];
-      if (!parsedMiddle) parsedMiddle = parts[1];
-      if (!parsedLast) parsedLast = parts[2];
-    } else if (parts.length >= 4) {
-      if (!parsedFirst) parsedFirst = parts.slice(0, parts.length - 2).join(" ");
-      if (!parsedMiddle) parsedMiddle = parts[parts.length - 2];
-      if (!parsedLast) parsedLast = parts[parts.length - 1];
+    const isEmailOrPlaceholder =
+      rawDisplayName.includes('@') ||
+      rawDisplayName.toUpperCase() === 'UNKNOWN USER' ||
+      rawDisplayName.toUpperCase() === 'UNNAMED USER' ||
+      rawDisplayName === ',' ||
+      rawDisplayName === ', ';
+
+    if ((!parsedFirst || !parsedLast) && rawDisplayName && !isEmailOrPlaceholder) {
+      const parts = rawDisplayName.trim().split(/\s+/);
+      if (parts.length === 1) {
+        if (!parsedFirst) parsedFirst = parts[0];
+      } else if (parts.length === 2) {
+        if (!parsedFirst) parsedFirst = parts[0];
+        if (!parsedLast) parsedLast = parts[1];
+      } else if (parts.length === 3) {
+        if (!parsedFirst) parsedFirst = parts[0];
+        if (!parsedMiddle) parsedMiddle = parts[1];
+        if (!parsedLast) parsedLast = parts[2];
+      } else if (parts.length >= 4) {
+        if (!parsedFirst) parsedFirst = parts.slice(0, parts.length - 2).join(" ");
+        if (!parsedMiddle) parsedMiddle = parts[parts.length - 2];
+        if (!parsedLast) parsedLast = parts[parts.length - 1];
+      }
     }
-  }
 
-  const initialSetupData = {
-    firstName: parsedFirst,
-    middleName: parsedMiddle,
-    lastName: parsedLast,
-    email: currentUser?.email || userDoc?.email || '',
-    schoolName: userDoc?.schoolName || userDoc?.school_name || userDoc?.school || '',
-    reviewBranch: userDoc?.reviewBranch || userDoc?.review_branch || userDoc?.branch || ''
-  };
+    return {
+      firstName: parsedFirst ? parsedFirst.toUpperCase() : '',
+      middleName: parsedMiddle ? parsedMiddle.toUpperCase() : '',
+      lastName: parsedLast ? parsedLast.toUpperCase() : '',
+      email: currentUser?.email || userDoc?.email || '',
+      schoolName: userDoc?.schoolName || userDoc?.school_name || userDoc?.school || '',
+      reviewBranch: userDoc?.reviewBranch || userDoc?.review_branch || userDoc?.branch || ''
+    };
+  }, [userDoc?.firstName, userDoc?.first_name, userDoc?.middleName, userDoc?.middle_name, userDoc?.lastName, userDoc?.last_name, userDoc?.schoolName, userDoc?.school_name, userDoc?.reviewBranch, userDoc?.review_branch, userDoc?.displayName, currentUser?.displayName, currentUser?.email, userDoc?.email]);
 
   if ((initialSessionLoading && !hasCompletedInitialSessionCheck && checkingDoc) || checkingDoc) {
     const isRestoring = initialSessionLoading && !hasCompletedInitialSessionCheck;

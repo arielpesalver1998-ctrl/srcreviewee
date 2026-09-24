@@ -216,7 +216,9 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
     const canonical = resolveCanonicalUserIdentity(u);
     const rawName = formatFormalName(canonical);
     const email = canonical.email || 'No email';
-    const seqId = canonical.idNumber || u.doc_id || '—';
+    const rawSeqId = u.seqId || u.seq_id || u.idNumber || u.id_number || u.srcId || canonical.idNumber || '';
+    const isRawUid = rawSeqId.length >= 20 && !rawSeqId.includes(' ') && !rawSeqId.startsWith('SRC') && !rawSeqId.startsWith('STF') && !rawSeqId.startsWith('ADM');
+    const seqId = (rawSeqId && !isRawUid && rawSeqId !== '-' && rawSeqId !== '—' && rawSeqId.toUpperCase() !== 'N/A') ? rawSeqId : '—';
     const school = canonical.school || '—';
     const accStatus = getUserAccountStatus(u);
     const isDropped = accStatus === 'dropped';

@@ -303,21 +303,45 @@ export async function clientEnroll(
   };
 }
 
-export async function clientUpdateUser(docId: string, data: any) {
+export async function clientUpdateUser(docId: string, data: any, options?: { allowIdChange?: boolean }) {
   await initFirebaseClient();
   const userRef = doc(firestoreDb, "users", docId);
   
+  // Validation Check: Fetch existing document to protect immutable sequence IDs
+  const currentSnap = await getDoc(userRef).catch(() => null);
+  const existingData = currentSnap?.exists() ? currentSnap.data() : null;
+  const existingRawId = String(
+    existingData?.seqId ||
+    existingData?.seq_id ||
+    existingData?.id_number ||
+    existingData?.idNumber ||
+    existingData?.srcId ||
+    ''
+  ).trim();
+
+  const isRawUid = existingRawId.length >= 20 && !existingRawId.includes(' ') && !existingRawId.startsWith('SRC') && !existingRawId.startsWith('STF') && !existingRawId.startsWith('ADM');
+  const hasExistingValidId = Boolean(existingRawId && !isRawUid && existingRawId !== '-' && existingRawId !== '—' && existingRawId.toUpperCase() !== 'N/A');
+
   const updateData = { ...data };
 
-  // Synchronize ID Number variations across all alias keys
-  const rawSeq = updateData.seqId ?? updateData.seq_id ?? updateData.id_number ?? updateData.idNumber ?? updateData.srcId;
-  if (rawSeq !== undefined && rawSeq !== null) {
-    const seqVal = String(rawSeq).trim();
-    updateData.seqId = seqVal;
-    updateData.seq_id = seqVal;
-    updateData.id_number = seqVal;
-    updateData.idNumber = seqVal;
-    updateData.srcId = seqVal;
+  // If a valid ID is already assigned and allowIdChange is not explicitly authorized (e.g. non-admin or accidental trigger), lock the ID
+  if (hasExistingValidId && !options?.allowIdChange) {
+    updateData.seqId = existingRawId;
+    updateData.seq_id = existingRawId;
+    updateData.id_number = existingRawId;
+    updateData.idNumber = existingRawId;
+    updateData.srcId = existingRawId;
+  } else {
+    // Synchronize ID Number variations across all alias keys
+    const rawSeq = updateData.seqId ?? updateData.seq_id ?? updateData.id_number ?? updateData.idNumber ?? updateData.srcId;
+    if (rawSeq !== undefined && rawSeq !== null) {
+      const seqVal = String(rawSeq).trim();
+      updateData.seqId = seqVal;
+      updateData.seq_id = seqVal;
+      updateData.id_number = seqVal;
+      updateData.idNumber = seqVal;
+      updateData.srcId = seqVal;
+    }
   }
 
   // Synchronize First Name

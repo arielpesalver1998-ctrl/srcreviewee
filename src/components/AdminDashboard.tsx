@@ -51,6 +51,7 @@ import { PortalLayout } from './PortalLayout';
 import { ProfileDashboard } from './ProfileDashboard';
 import { downloadRegisteredUsersCsv } from '../utils/exportUsersCsv';
 import { deduplicateUsersByIdNumber } from '../services/userIdentityResolver';
+import { DuplicateResolver } from './DuplicateResolver';
 
 interface AdminDashboardProps {
   currentUser: any;
@@ -183,6 +184,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const cleanSeqId = String(updatedData.seqId || updatedData.seq_id || '').trim().toUpperCase();
       const updatedRole = updatedData.role || updatedData.userRole || 'Reviewee';
 
+      const targetStatus = updatedData.status === 'pending' ? 'pending_profile' : (updatedData.status || updatedData.accountStatus || 'active');
+      const isPending = targetStatus === 'pending_profile' || targetStatus === 'pending';
+      const isDropped = targetStatus === 'dropped';
+
       await updateDoc(docRef, {
         firstName: updatedData.firstName || '',
         first_name: (updatedData.firstName || '').toUpperCase(),
@@ -195,8 +200,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         userRole: updatedRole,
         seqId: cleanSeqId,
         seq_id: cleanSeqId,
-        status: updatedData.status || updatedData.accountStatus || 'active',
-        accountStatus: updatedData.status || updatedData.accountStatus || 'active',
+        idNumber: cleanSeqId,
+        id_number: cleanSeqId,
+        srcId: cleanSeqId,
+        src_id: cleanSeqId,
+        studentId: cleanSeqId,
+        student_id: cleanSeqId,
+        status: targetStatus,
+        accountStatus: targetStatus,
+        profileCompleted: isPending ? false : isDropped ? false : true,
         updatedAt: new Date().toISOString(),
       });
       setActionNotice(`User ${updatedData.firstName} ${updatedData.lastName} updated successfully.`);
@@ -686,20 +698,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* DUPLICATE RESOLVER TAB */}
         {activeTab === 'duplicate-resolver' && (
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-4 sm:p-6 shadow-sm">
-            <div className="mb-4">
-              <h2 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
-                <Users2 className="text-indigo-600" size={22} /> Duplicate Account Resolution
-              </h2>
-              <p className="text-xs text-slate-500 font-medium mt-1">
-                Identify and consolidate duplicate email records or multiple user documents sharing the same ID number.
-              </p>
-            </div>
-            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-              <span>All {allUsers.length} user accounts have been resolved and indexed with primary UID documents.</span>
-            </div>
-          </div>
+          <DuplicateResolver
+            allUsers={allUsers}
+            onEditUser={(user) => setEditingUser(user)}
+            currentUser={currentUser}
+          />
         )}
 
         {/* AUDIT LOG TAB */}

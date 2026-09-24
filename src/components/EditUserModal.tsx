@@ -16,7 +16,20 @@ interface EditUserModalProps {
 }
 
 export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onClose, onSave, currentUserRole, allUsers = [] }) => {
-  const initialStatus = String(user.accountStatus || user.status || 'active').toLowerCase() === 'dropped' ? 'dropped' : 'active';
+  const rawStatus = String(user.accountStatus || user.status || 'active').toLowerCase();
+  let initialStatus: 'active' | 'pending' | 'dropped' = 'active';
+  if (rawStatus === 'dropped' || rawStatus === 'drop') {
+    initialStatus = 'dropped';
+  } else if (
+    rawStatus === 'pending' ||
+    rawStatus === 'pending_profile' ||
+    rawStatus === 'pending_verification' ||
+    rawStatus === 'unlinked' ||
+    user.profileCompleted === false
+  ) {
+    initialStatus = 'pending';
+  }
+
   const [formData, setFormData] = useState({
     firstName: user.firstName || user.first_name || '',
     middleName: cleanOptionalName(user.middleName || user.middle_name || ''),
@@ -69,6 +82,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
     try {
       const cleanedMiddle = cleanOptionalName(formData.middleName);
       const cleanSeqId = formData.seqId.trim().toUpperCase();
+      const targetStatus = (formData.status as string) === 'pending' ? 'pending_profile' : formData.status;
+      const isPending = targetStatus === 'pending_profile';
+      const isDropped = targetStatus === 'dropped';
+
       await onSave({
         ...user,
         ...formData,
@@ -76,11 +93,18 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
         userRole: formData.role,
         seqId: cleanSeqId,
         seq_id: cleanSeqId,
+        idNumber: cleanSeqId,
+        id_number: cleanSeqId,
+        srcId: cleanSeqId,
+        src_id: cleanSeqId,
+        studentId: cleanSeqId,
+        student_id: cleanSeqId,
         middleName: cleanedMiddle,
         middle_name: cleanedMiddle,
         middle_initial: cleanedMiddle ? `${cleanedMiddle.charAt(0).toUpperCase()}.` : '',
-        status: formData.status,
-        accountStatus: formData.status,
+        status: targetStatus,
+        accountStatus: targetStatus,
+        profileCompleted: isPending ? false : isDropped ? false : true,
       });
       setIsConfirming(false);
       onClose();
@@ -123,15 +147,15 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-1">First Name</label>
-              <input type="text" disabled={isEditingForbidden} value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm disabled:bg-slate-100" />
+              <input type="text" disabled={isEditingForbidden} value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value.toUpperCase()})} className="w-full p-2 border border-slate-200 rounded-lg text-sm disabled:bg-slate-100 uppercase" />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-1">Middle Name</label>
-              <input type="text" disabled={isEditingForbidden} value={formData.middleName} onChange={e => setFormData({...formData, middleName: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm disabled:bg-slate-100" />
+              <input type="text" disabled={isEditingForbidden} value={formData.middleName} onChange={e => setFormData({...formData, middleName: e.target.value.toUpperCase()})} className="w-full p-2 border border-slate-200 rounded-lg text-sm disabled:bg-slate-100 uppercase" />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-1">Last Name</label>
-              <input type="text" disabled={isEditingForbidden} value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm disabled:bg-slate-100" />
+              <input type="text" disabled={isEditingForbidden} value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value.toUpperCase()})} className="w-full p-2 border border-slate-200 rounded-lg text-sm disabled:bg-slate-100 uppercase" />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-1">Email</label>
@@ -163,9 +187,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
                 value={formData.status}
                 options={[
                   { value: 'active', label: 'Active' },
+                  { value: 'pending', label: 'Pending (Profile Incomplete)' },
                   { value: 'dropped', label: 'Dropped' },
                 ]}
-                onChange={(s) => setFormData({...formData, status: s})}
+                onChange={(s) => setFormData({...formData, status: s as 'active' | 'pending' | 'dropped'})}
                 placeholder="Select Status"
                 searchable={false}
                 disabled={isEditingForbidden}
@@ -173,7 +198,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-1">ID Number</label>
-              <input type="text" disabled={isEditingForbidden} value={formData.seqId} onChange={e => setFormData({...formData, seqId: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm disabled:bg-slate-100" />
+              <input type="text" disabled={isEditingForbidden} value={formData.seqId} onChange={e => setFormData({...formData, seqId: e.target.value.toUpperCase()})} className="w-full p-2 border border-slate-200 rounded-lg text-sm disabled:bg-slate-100 uppercase" />
             </div>
           </div>
           <button type="button" disabled={isEditingForbidden} onClick={handleSubmit} className="w-full mt-6 bg-teal-600 text-white font-bold py-2.5 rounded-xl hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">

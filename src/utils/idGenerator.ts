@@ -201,6 +201,60 @@ export async function linkOrCreateUserRecord(
     const cleanEmail = normalizeEmail(email);
     const timestamp = new Date().toISOString();
 
+    // ID IMMUTABILITY CHECK: If this account already has an assigned sequence ID, preserve and lock it permanently
+    const currentDocRef = doc(db, "users", uid);
+    const currentSnap = await withTimeout(getDoc(currentDocRef)).catch(() => null);
+    const currentDocData = currentSnap?.exists() ? currentSnap.data() : null;
+    const currentRawId = String(currentDocData?.seq_id || currentDocData?.seqId || currentDocData?.srcId || currentDocData?.id_number || currentDocData?.idNumber || "").trim();
+    const isRawUid = currentRawId.length >= 20 && !currentRawId.includes(' ') && !currentRawId.startsWith('SRC') && !currentRawId.startsWith('STF') && !currentRawId.startsWith('ADM');
+    const hasExistingValidId = Boolean(currentRawId && !isRawUid && currentRawId !== '-' && currentRawId !== '—' && currentRawId.toUpperCase() !== 'N/A' && currentRawId.toUpperCase() !== 'NONE');
+
+    if (hasExistingValidId) {
+      const lockedSeqId = currentRawId;
+      const updatedUserPayload = {
+        ...currentDocData,
+        uid,
+        authUid: uid,
+        firebaseUid: uid,
+        email: cleanEmail,
+        email_lower: cleanEmail,
+        normalizedEmail: cleanEmail,
+        firstName: firstName || currentDocData?.firstName || currentDocData?.first_name,
+        first_name: uFirstName || currentDocData?.first_name,
+        middleName: middleName || currentDocData?.middleName || currentDocData?.middle_name,
+        middle_name: normalizeStr(middleName) || currentDocData?.middle_name,
+        lastName: lastName || currentDocData?.lastName || currentDocData?.last_name,
+        last_name: uLastName || currentDocData?.last_name,
+        schoolName: schoolName || currentDocData?.schoolName || currentDocData?.school_name,
+        school_name: normalizeStr(schoolName) || currentDocData?.school_name,
+        school: schoolName || currentDocData?.school,
+        reviewBranch: reviewBranch || currentDocData?.reviewBranch || currentDocData?.review_branch,
+        review_branch: normalizeStr(reviewBranch) || currentDocData?.review_branch,
+        branch: reviewBranch || currentDocData?.branch,
+        srcId: lockedSeqId,
+        seq_id: lockedSeqId,
+        seqId: lockedSeqId,
+        id_number: lockedSeqId,
+        idNumber: lockedSeqId,
+        role: currentDocData?.role || "Reviewee",
+        userRole: currentDocData?.role || "Reviewee",
+        status: currentDocData?.status || "active",
+        accountStatus: currentDocData?.accountStatus || "active",
+        profileCompleted: true,
+        updatedAt: timestamp,
+        updated_at: timestamp,
+      };
+
+      await setDoc(currentDocRef, updatedUserPayload, { merge: true });
+
+      return {
+        status: 'active',
+        matchType: 'perfect',
+        seqId: lockedSeqId,
+        message: `Your account is active with ID Number ${lockedSeqId}.`
+      };
+    }
+
     // 0. CASE: User explicitly confirmed "Yes, this is me" for forcedMatchedRecord
     if (forcedMatchedRecord) {
       const oldRecord = forcedMatchedRecord;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   GraduationCap,
@@ -121,9 +121,9 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
 
   // Form states
-  const [firstName, setFirstName] = useState(initialData?.firstName || '');
-  const [middleName, setMiddleName] = useState(initialData?.middleName || '');
-  const [lastName, setLastName] = useState(initialData?.lastName || '');
+  const [firstName, setFirstName] = useState(() => (initialData?.firstName ? String(initialData.firstName).toUpperCase() : ''));
+  const [middleName, setMiddleName] = useState(() => (initialData?.middleName ? String(initialData.middleName).toUpperCase() : ''));
+  const [lastName, setLastName] = useState(() => (initialData?.lastName ? String(initialData.lastName).toUpperCase() : ''));
   
   // Password states (for linking to Google account)
   const [password, setPassword] = useState('');
@@ -147,6 +147,9 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
   const [selectedBranch, setSelectedBranch] = useState(initialData?.reviewBranch || '');
   const [branchSuggestions, setBranchSuggestions] = useState<string[]>([]);
   const [showBranchDropdown, setShowBranchDropdown] = useState(false);
+
+  // Track initialization to avoid ever resetting user inputs during typing or deletion
+  const initializedRef = useRef(false);
 
   // Saved record from step 2 submission
   const [savedUserData, setSavedUserData] = useState<any | null>(null);
@@ -217,17 +220,19 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
     return () => clearTimeout(timer);
   }, [firstName, lastName]);
 
-  // Sync initialData when provided asynchronously
+  // Seed initialData only ONCE on mount if initialData was loaded asynchronously
   useEffect(() => {
+    if (initializedRef.current) return;
     if (initialData) {
-      if (initialData.firstName && !firstName) setFirstName(initialData.firstName);
-      if (initialData.middleName && !middleName) setMiddleName(initialData.middleName);
-      if (initialData.lastName && !lastName) setLastName(initialData.lastName);
-      if (initialData.schoolName && !selectedSchool && !schoolInput) {
+      initializedRef.current = true;
+      if (initialData.firstName) setFirstName(String(initialData.firstName).toUpperCase());
+      if (initialData.middleName) setMiddleName(String(initialData.middleName).toUpperCase());
+      if (initialData.lastName) setLastName(String(initialData.lastName).toUpperCase());
+      if (initialData.schoolName) {
         setSelectedSchool(initialData.schoolName);
         setSchoolInput(initialData.schoolName);
       }
-      if (initialData.reviewBranch && !selectedBranch && !branchInput) {
+      if (initialData.reviewBranch) {
         setSelectedBranch(initialData.reviewBranch);
         setBranchInput(initialData.reviewBranch);
       }
@@ -554,24 +559,30 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
                     <input
                       type="text"
                       required
-                      placeholder="Enter your first name"
+                      placeholder="ENTER YOUR FIRST NAME"
                       value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-900"
+                      autoCapitalize="characters"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      onChange={(e) => setFirstName(e.target.value.toUpperCase())}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-semibold uppercase tracking-wide transition-all outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-900"
                     />
                   </div>
 
                   {/* Middle Name */}
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-700">
-                      Middle Name <span className="text-slate-400 font-normal">(optional)</span>
+                      Middle Name <span className="text-slate-400 font-normal lowercase">(optional)</span>
                     </label>
                     <input
                       type="text"
-                      placeholder="Enter your middle name"
+                      placeholder="ENTER YOUR MIDDLE NAME"
                       value={middleName}
-                      onChange={(e) => setMiddleName(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-900"
+                      autoCapitalize="characters"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      onChange={(e) => setMiddleName(e.target.value.toUpperCase())}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-semibold uppercase tracking-wide transition-all outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-900"
                     />
                   </div>
 
@@ -583,10 +594,13 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
                     <input
                       type="text"
                       required
-                      placeholder="Enter your last name"
+                      placeholder="ENTER YOUR LAST NAME"
                       value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-900"
+                      autoCapitalize="characters"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      onChange={(e) => setLastName(e.target.value.toUpperCase())}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-semibold uppercase tracking-wide transition-all outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-900"
                     />
                   </div>
 

@@ -547,10 +547,13 @@ export function SignupPage({ onSuccess, onToggleLogin }: SignupPageProps) {
             <input
               type="text"
               required
-              placeholder="Ariel"
+              placeholder="ARIEL"
               value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              className={inputBase}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              onChange={(e) => setFirstName(e.target.value.toUpperCase())}
+              className={`${inputBase} uppercase font-semibold`}
             />
           </div>
 
@@ -561,10 +564,13 @@ export function SignupPage({ onSuccess, onToggleLogin }: SignupPageProps) {
             </label>
             <input
               type="text"
-              placeholder="Orcia"
+              placeholder="ORCIA"
               value={middleName}
-              onChange={(e) => setMiddleName(e.target.value)}
-              className={inputBase}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              onChange={(e) => setMiddleName(e.target.value.toUpperCase())}
+              className={`${inputBase} uppercase font-semibold`}
             />
           </div>
         </div>
@@ -577,10 +583,13 @@ export function SignupPage({ onSuccess, onToggleLogin }: SignupPageProps) {
           <input
             type="text"
             required
-            placeholder="Pesalver"
+            placeholder="PESALVER"
             value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            className={inputBase}
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            onChange={(e) => setLastName(e.target.value.toUpperCase())}
+            className={`${inputBase} uppercase font-semibold`}
           />
         </div>
 
