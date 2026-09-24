@@ -10,6 +10,7 @@ export function PortalLoading({
   subMessage,
   submessage,
   status = "Preparing your portal…",
+  error,
   ...props
 }: PortalLoadingProps) {
   return (
@@ -17,6 +18,7 @@ export function PortalLoading({
       message={message}
       subMessage={subMessage || submessage || "Please wait, Future RCrim."}
       status={status}
+      error={error}
       {...props}
     />
   );

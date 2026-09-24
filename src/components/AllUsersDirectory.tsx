@@ -8,6 +8,7 @@ import { RepairEmailModal } from './RepairEmailModal';
 import { UserAvatar } from './UserAvatar';
 import { downloadRegisteredUsersCsv } from '../utils/exportUsersCsv';
 import { downloadRegisteredUsersPdf, ExportUsersPdfOptions } from '../utils/exportUsersPdf';
+import { scanAndRepairMergedUsers, RegistryScanResult } from '../services/registryHealthService';
 
 export function formatUserCreationDate(user: any): string | null {
   if (!user) return null;
@@ -68,6 +69,22 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [internalExportingCsv, setInternalExportingCsv] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isScanningRegistry, setIsScanningRegistry] = useState(false);
+  const [scanResult, setScanResult] = useState<RegistryScanResult | null>(null);
+
+  const handleScanAndRepair = async () => {
+    setIsScanningRegistry(true);
+    setScanResult(null);
+    try {
+      const res = await scanAndRepairMergedUsers();
+      setScanResult(res);
+    } catch (err: any) {
+      console.error('Error repairing registry:', err);
+      alert('Failed to scan and repair registry: ' + (err?.message || String(err)));
+    } finally {
+      setIsScanningRegistry(false);
+    }
+  };
 
   const loggedInRole = getUserRole(currentUser);
   const isStaffLoggedIn = loggedInRole === 'Staff';
@@ -96,12 +113,11 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
 
     valid.forEach((u) => {
       const status = getUserAccountStatus(u);
-      if (status === 'active' && isValidUserRecord(u)) {
+      all++;
+      if (status === 'active') {
         active++;
-        all++;
       } else if (status === 'dropped') {
         dropped++;
-        all++;
       } else if (status === 'pending_profile') {
         pending++;
       }
@@ -123,7 +139,7 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
       }
 
       if (statusFilter === 'active') {
-        if (status !== 'active' || !isValidUserRecord(u)) {
+        if (status !== 'active') {
           return false;
         }
       } else if (statusFilter === 'dropped') {
@@ -135,12 +151,7 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
           return false;
         }
       } else if (statusFilter === 'all') {
-        if (status !== 'active' && status !== 'dropped') {
-          return false;
-        }
-        if (status === 'active' && !isValidUserRecord(u)) {
-          return false;
-        }
+        // In "ALL", show all active, dropped, and pending registered accounts
       }
 
       const role = getUserRole(u);
@@ -154,9 +165,10 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
 
       const matchesName = canonical.fullName.toLowerCase().includes(q) || canonical.firstName.toLowerCase().includes(q) || canonical.lastName.toLowerCase().includes(q);
       const email = canonical.email.toLowerCase();
-      const seqId = canonical.idNumber.toLowerCase();
-      const school = canonical.school.toLowerCase();
-      return matchesName || email.includes(q) || seqId.includes(q) || school.includes(q);
+      const seqId = (canonical.idNumber || u.seq_id || u.seqId || u.id_number || u.srcId || '').toLowerCase();
+      const school = (canonical.school || u.schoolName || u.school_name || '').toLowerCase();
+      const branch = (canonical.branch || u.review_branch || u.branch || '').toLowerCase();
+      return matchesName || email.includes(q) || seqId.includes(q) || school.includes(q) || branch.includes(q);
     });
 
     return [...list].sort(compareUsersAlphabetically);
@@ -202,13 +214,16 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
   const rows = filteredUsers.map((u) => {
     const role = getUserRole(u);
     const canonical = resolveCanonicalUserIdentity(u);
-    const name = formatFormalName(canonical);
+    const rawName = formatFormalName(canonical);
     const email = canonical.email || 'No email';
     const seqId = canonical.idNumber || u.doc_id || '—';
     const school = canonical.school || '—';
     const accStatus = getUserAccountStatus(u);
     const isDropped = accStatus === 'dropped';
     const isPending = accStatus === 'pending_profile';
+    const name = (rawName === 'UNKNOWN USER' && isPending)
+      ? (canonical.email ? `Pending Profile (${canonical.email})` : 'Incomplete Profile')
+      : rawName;
     const creationDate = formatUserCreationDate(u);
     let status = 'Active';
     if (isDropped) status = 'Dropped';
@@ -359,13 +374,29 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
           {/* Action Buttons: Repair Links + Download PDF + Download CSV */}
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             {isAdminLoggedIn && (
-              <button
-                onClick={() => setIsRepairModalOpen(true)}
-                className="px-3.5 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
-              >
-                <Wrench size={14} className="text-slate-500" />
-                <span>Repair Email Links</span>
-              </button>
+              <>
+                <button
+                  onClick={handleScanAndRepair}
+                  disabled={isScanningRegistry}
+                  className="px-3.5 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+                  title="Scan database for any registered users mistakenly marked as 'merged' and restore them to Active"
+                >
+                  {isScanningRegistry ? (
+                    <Loader2 size={14} className="animate-spin text-emerald-600" />
+                  ) : (
+                    <CheckCircle2 size={14} className="text-emerald-600" />
+                  )}
+                  <span>Heal & Sync Registry</span>
+                </button>
+
+                <button
+                  onClick={() => setIsRepairModalOpen(true)}
+                  className="px-3.5 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <Wrench size={14} className="text-slate-500" />
+                  <span>Repair Email Links</span>
+                </button>
+              </>
             )}
 
             {/* Download PDF Button with Modal Trigger */}
@@ -400,6 +431,44 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Scan & Heal Result Banner */}
+      {scanResult && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-4 sm:p-5 flex items-start gap-3 shadow-xs">
+          <CheckCircle2 size={20} className="text-emerald-600 shrink-0 mt-0.5" />
+          <div className="flex-1 space-y-1">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-black text-emerald-950">
+                Registry Scan Complete: Scanned {scanResult.totalScanned} Documents
+              </h4>
+              <button
+                onClick={() => setScanResult(null)}
+                className="text-emerald-700 hover:text-emerald-900 p-1 text-xs font-bold"
+              >
+                Dismiss
+              </button>
+            </div>
+            <p className="text-xs text-emerald-800 font-medium">
+              {scanResult.healedCount > 0 ? (
+                <>
+                  Successfully repaired and restored <strong>{scanResult.healedCount} user(s)</strong> mistakenly flagged with status 'merged' back to <strong>Active</strong> status!
+                </>
+              ) : (
+                'All user accounts in Firestore are verified and healthy. No missing active users found.'
+              )}
+            </p>
+            {scanResult.healedUsers.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-emerald-200/80 flex flex-wrap gap-2 text-[11px] text-emerald-900">
+                {scanResult.healedUsers.map((u) => (
+                  <span key={u.id} className="bg-white/80 px-2.5 py-1 rounded-lg border border-emerald-200 font-bold">
+                    {u.name} (ID: {u.seqId})
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Directory Table Card */}
       <div className="bg-white border border-slate-200/80 rounded-3xl p-3 sm:p-5 shadow-sm overflow-hidden">
@@ -695,3 +764,6 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
     </div>
   );
 };
+
+export const AdminUserList = AllUsersDirectory;
+export default AllUsersDirectory;

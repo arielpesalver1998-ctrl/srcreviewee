@@ -14,6 +14,8 @@ import { activateExistingWithPin } from '../utils/idGenerator';
 import { ensureUserDocument } from '../utils/userUtils';
 import { PortalLoading } from './PortalLoading';
 
+import { runLoginStatusCheckMiddleware } from '../services/loginStatusMiddleware';
+
 interface AuthPageProps {
   onSuccess: (userData: any) => void;
 }
@@ -21,27 +23,34 @@ interface AuthPageProps {
 export function AuthPage({ onSuccess }: AuthPageProps) {
   const [mode, setMode] = useState<'login' | 'signup' | 'profile-setup' | 'email-verification-pending' | 'verification-pending'>('login');
   
+  const modeRef = React.useRef(mode);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userDoc, setUserDoc] = useState<any>(null);
   const [checkingDoc, setCheckingDoc] = useState(false);
   const [initialSessionLoading, setInitialSessionLoading] = useState(true);
   const [hasCompletedInitialSessionCheck, setHasCompletedInitialSessionCheck] = useState(false);
   const [isTakingLonger, setIsTakingLonger] = useState(false);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
   const [resendingEmail, setResendingEmail] = useState(false);
   const [emailMsg, setEmailMsg] = useState<string | null>(null);
   const [sandboxBypass, setSandboxBypass] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let timer: any;
-    if (checkingDoc || (initialSessionLoading && !hasCompletedInitialSessionCheck)) {
+    if ((checkingDoc || (initialSessionLoading && !hasCompletedInitialSessionCheck)) && !loadingError) {
       timer = setTimeout(() => {
         setIsTakingLonger(true);
-      }, 25000);
+      }, 8000); // 8s timeout instead of 25s
     } else {
       setIsTakingLonger(false);
     }
     return () => clearTimeout(timer);
-  }, [checkingDoc, initialSessionLoading, hasCompletedInitialSessionCheck]);
+  }, [checkingDoc, initialSessionLoading, hasCompletedInitialSessionCheck, loadingError]);
 
   const onSuccessRef = React.useRef(onSuccess);
   useEffect(() => {
@@ -152,19 +161,18 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
           setCheckingDoc(false);
           setInitialSessionLoading(false);
           setHasCompletedInitialSessionCheck(true);
+          setLoadingError(null);
         }
         return;
       }
 
-      if (!hasCompletedInitialSessionCheck) {
-        setCheckingDoc(true);
-        setInitialSessionLoading(true);
-      }
+      setCheckingDoc(true);
+      setLoadingError(null);
 
       try {
         const { db } = await initFirebaseClient();
         if (!db) {
-          throw new Error("Firestore database is not initialized.");
+          throw new Error("Firestore database is not initialized. Please verify Firebase configuration.");
         }
         
         const resolvedProfile = await ensureUserDocument(user);
@@ -182,6 +190,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
           setCheckingDoc(false);
           setInitialSessionLoading(false);
           setHasCompletedInitialSessionCheck(true);
+          setLoadingError(null);
 
           if (snap.exists()) {
             const data: any = { id: snap.id, ...snap.data() };
@@ -200,6 +209,17 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
               return;
             }
 
+            // Status-check middleware: If user has 'merged' or 'unknown' status or incomplete profile,
+            // update Firestore status to 'pending_profile' and force them into ProfileSetup
+            runLoginStatusCheckMiddleware(user, data).then((statusCheck) => {
+              if (cancelled) return;
+              if (statusCheck.shouldForcePending) {
+                setMode('profile-setup');
+              }
+            }).catch((err) => {
+              console.error('Error running login status check middleware:', err);
+            });
+
             const hasFirstName = Boolean(data.first_name || data.firstName);
             const hasLastName = Boolean(data.last_name || data.lastName);
             const hasName = hasFirstName && hasLastName;
@@ -210,16 +230,24 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
             const isGoogleUser = user.providerData?.some(p => p.providerId === 'google.com') || data.registrationMethod === 'google' || data.authProvider === 'google';
             const isManualUser = data.registrationMethod === 'manual' || data.authProvider === 'password' || !isGoogleUser;
 
-            const profileCompleted = data.profileCompleted === true && hasSeqId && hasName && hasSchool && hasBranch;
+            const isMergedOrUnknown = data.status === 'merged' || data.status === 'unknown' || data.accountStatus === 'merged' || data.accountStatus === 'unknown';
 
-            // CRITICAL: Complete Your Profile card must be shown to Google users whose profile setup has not completed
-            if (isGoogleUser && (!profileCompleted || data.accountStatus === 'pending_profile' || !hasSeqId || !hasName || !hasSchool || !hasBranch)) {
+            const profileCompleted = data.profileCompleted === true && hasSeqId && hasName && hasSchool && hasBranch && data.accountStatus === 'active' && !isMergedOrUnknown;
+
+            // CRITICAL: Complete Your Profile card must be shown to users whose profile setup has not completed or has merged/unknown/pending status
+            if (!profileCompleted || isMergedOrUnknown || data.accountStatus === 'pending_profile' || data.status === 'pending_profile' || !hasSeqId || !hasName || !hasSchool || !hasBranch) {
               setMode('profile-setup');
               return;
             }
 
             if (isManualUser && !user.emailVerified && !sandboxBypassRef.current) {
               setMode('email-verification-pending');
+              return;
+            }
+
+            // If user is currently in the profile-setup onboarding wizard, do not automatically dismiss it!
+            // ProfileSetup component will call onCompleted when user views ID and finishes Welcome step.
+            if (modeRef.current === 'profile-setup') {
               return;
             }
 
@@ -235,16 +263,18 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         }, (err) => {
           if (cancelled) return;
           console.error("User doc listener error:", err);
-          setCheckingDoc(false);
+          setCheckingDoc(true);
           setInitialSessionLoading(false);
           setHasCompletedInitialSessionCheck(true);
+          setLoadingError(err.message || "Failed to listen for user profile updates in Firestore.");
         });
-      } catch (e) {
+      } catch (e: any) {
         if (cancelled) return;
-        console.error("Failed to initialize database listener:", e);
-        setCheckingDoc(false);
+        console.error("Failed to initialize user document or listener:", e);
+        setCheckingDoc(true);
         setInitialSessionLoading(false);
         setHasCompletedInitialSessionCheck(true);
+        setLoadingError(e.message || "Failed to load your reviewee profile. Please check your network connection.");
       }
     });
 
@@ -255,7 +285,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         unsubscribeUserDoc();
       }
     };
-  }, []);
+  }, [retryCount]);
 
   // Handle successful signup
   const handleSignupSuccess = (user: any, linkResult: any) => {
@@ -375,15 +405,16 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
         subMessage="Please wait, Future RCrim."
         status={isRestoring ? "Checking your portal access…" : "Preparing your portal…"}
         isTakingLonger={isTakingLonger}
+        error={loadingError}
         onRetry={() => {
           setIsTakingLonger(false);
-          if (auth.currentUser) {
-            setCheckingDoc(true);
-          }
+          setLoadingError(null);
+          setRetryCount((prev) => prev + 1);
         }}
         onBackToLogin={async () => {
           await logout();
           setIsTakingLonger(false);
+          setLoadingError(null);
           setCheckingDoc(false);
           setInitialSessionLoading(false);
           setHasCompletedInitialSessionCheck(true);

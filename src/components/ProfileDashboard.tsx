@@ -6,6 +6,7 @@ import { getClientDb } from '../utils/firebaseClient';
 import { auth } from '../utils/auth';
 import { getUserRole, isAdmin, isSuperAdminEmail, isAdminLike } from '../utils/roleUtils';
 import { getDisplayIdNumber } from '../utils/idResolver';
+import { getUserAccountStatus } from '../services/userIdentityResolver';
 import { compressAndConvertToBase64 } from '../utils/imageUtils';
 import { UserAvatar } from './UserAvatar';
 import { AdminFolderSyncViewer } from './AdminFolderSyncViewer';
@@ -34,8 +35,24 @@ export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ currentUser,
   const role = getUserRole(currentUser);
   const uid = currentUser?.uid || currentUser?.id || currentUser?.doc_id || currentUser?.docId;
   const seqId = getDisplayIdNumber(role as any, currentUser) || currentUser?.seqId || currentUser?.seq_id || currentUser?.id_number || 'No ID assigned';
-  const status = currentUser?.accountStatus || currentUser?.status || 'Active';
+  const computedStatus = getUserAccountStatus(currentUser);
+  const status = computedStatus === 'merged' ? 'Active' : (computedStatus.charAt(0).toUpperCase() + computedStatus.slice(1));
   const createdAt = currentUser?.createdAt || currentUser?.created_at || currentUser?.timestamp || 'Recently';
+
+  // Auto-heal in background if legacy status was 'merged'
+  React.useEffect(() => {
+    if (uid && (currentUser?.accountStatus === 'merged' || currentUser?.status === 'merged')) {
+      const db = getClientDb();
+      if (db) {
+        updateDoc(doc(db, 'users', uid), {
+          accountStatus: 'active',
+          status: 'active',
+          isDeleted: false,
+          deleted: false,
+        }).catch((err) => console.warn('Could not auto-heal user status:', err));
+      }
+    }
+  }, [uid, currentUser?.accountStatus, currentUser?.status]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

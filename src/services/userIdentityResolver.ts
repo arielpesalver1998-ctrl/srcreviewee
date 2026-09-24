@@ -165,50 +165,117 @@ export function getUserAccountStatus(user: any): UserAccountStatus {
 
   const rawStatus = String(user.accountStatus || user.status || '').trim().toLowerCase();
 
-  if (rawStatus === 'merged' || user.mergedIntoUid) return 'merged';
   if (rawStatus === 'deleted' || user.isDeleted || user.deleted || user.is_deleted) return 'deleted';
   if (rawStatus === 'dropped' || rawStatus === 'drop') return 'dropped';
-  if (rawStatus === 'pending_profile' || rawStatus === 'pending') return 'pending_profile';
+
+  const idNumber = String(
+    user.seq_id ??
+    user.seqId ??
+    user.id_number ??
+    user.idNumber ??
+    user.srcId ??
+    user.src_id ??
+    user.student_id ??
+    user.studentId ??
+    user.revieweeId ??
+    user.reviewee_id ??
+    user.staffId ??
+    user.staff_id ??
+    user.adminId ??
+    user.admin_id ??
+    ''
+  ).trim();
+
+  const hasValidId = Boolean(
+    idNumber &&
+    idNumber !== '—' &&
+    idNumber !== '-' &&
+    idNumber.toUpperCase() !== 'N/A' &&
+    idNumber.toUpperCase() !== 'NONE'
+  );
+
+  const firstName = String(user.firstName ?? user.first_name ?? user.givenName ?? user.given_name ?? '').trim();
+  const lastName = String(user.lastName ?? user.last_name ?? user.surname ?? user.familyName ?? user.family_name ?? '').trim();
+  const fullName = String(user.fullName ?? user.full_name ?? user.displayName ?? user.display_name ?? user.name ?? '').trim();
+
+  const isCommaOnlyName =
+    (!lastName && !firstName && (!fullName || fullName === ',' || fullName === ', ' || fullName.trim() === ',')) ||
+    fullName.trim() === ',' ||
+    fullName.trim() === ', ';
+
+  const hasRealName = Boolean(
+    !isCommaOnlyName &&
+    (
+      (firstName && firstName.toUpperCase() !== 'UNKNOWN') ||
+      (lastName && lastName.toUpperCase() !== 'USER') ||
+      (fullName && fullName.toUpperCase() !== 'UNKNOWN USER' && fullName.toUpperCase() !== 'UNNAMED USER')
+    )
+  );
+
+  // If the user has an assigned ID, they are ALWAYS active (even if a legacy doc flag was 'merged')
+  if (hasValidId) {
+    return 'active';
+  }
 
   const role = String(user.role || user.role_name || user.userRole || '').toLowerCase();
   const isAdminOrStaff = role === 'admin' || role === 'staff' || user.isAdmin || user.isStaff;
 
   if (isAdminOrStaff) {
-    const hasName = Boolean(user.firstName || user.first_name || user.lastName || user.last_name || user.displayName || user.name);
-    const hasEmail = Boolean(user.email);
-    if (!hasName && !hasEmail) return 'pending_profile';
-    return (rawStatus === 'active' || rawStatus === '') ? 'active' : 'pending_profile';
+    const hasEmail = Boolean(user.email || user.email_lower || user.normalizedEmail);
+    if (!hasRealName && !hasEmail) return 'pending_profile';
+    return (rawStatus === 'active' || rawStatus === '' || rawStatus === 'pending_profile') ? 'active' : 'pending_profile';
   }
 
-  // For Reviewees:
-  // Must satisfy profile completion AND have a valid reviewee ID and valid name
-  if (user.profileCompleted === false) {
+  // For Reviewees without an ID:
+  // If they have not completed profile or have no real name, they MUST be pending_profile
+  if (
+    user.profileCompleted === false ||
+    !hasRealName ||
+    rawStatus === 'pending_profile' ||
+    rawStatus === 'pending' ||
+    rawStatus === 'pending_verification' ||
+    rawStatus === 'unlinked'
+  ) {
     return 'pending_profile';
   }
 
-  const isRevieweeValid = isValidRevieweeRecord(user);
-  if (!isRevieweeValid) {
-    // If it lacks a valid sequence ID or valid name, classify as pending_profile instead of active
-    return 'pending_profile';
-  }
-
-  if (rawStatus === 'active' || rawStatus === '') {
-    return 'active';
-  }
-
-  return 'pending_profile';
+  return 'active';
 }
 
 export function isValidRevieweeRecord(user: any): boolean {
   if (!user) return false;
 
-  // Account status check
+  const idNumber = String(
+    user.seq_id ??
+    user.seqId ??
+    user.id_number ??
+    user.idNumber ??
+    user.srcId ??
+    user.src_id ??
+    user.student_id ??
+    user.studentId ??
+    user.revieweeId ??
+    user.reviewee_id ??
+    ""
+  ).trim();
+
+  const hasId = Boolean(
+    idNumber &&
+    idNumber !== "—" &&
+    idNumber !== "-" &&
+    idNumber.toUpperCase() !== "N/A" &&
+    idNumber.toUpperCase() !== "NONE"
+  );
+
+  // If user has an assigned ID, they are ALWAYS valid regardless of legacy status strings
+  if (hasId) {
+    return true;
+  }
+
+  // Account status check for non-ID users
   const status = String(user.accountStatus || user.status || "").toLowerCase();
   if (
-    status === "merged" ||
     status === "deleted" ||
-    status === "pending_profile" ||
-    status === "pending" ||
     user.isDeleted ||
     user.deleted ||
     user.is_deleted
@@ -216,27 +283,11 @@ export function isValidRevieweeRecord(user: any): boolean {
     return false;
   }
 
-  if (user.profileCompleted === false) {
-    return false;
-  }
-
-  const idNumber = String(
-    user.seq_id ??
-    user.seqId ??
-    user.id_number ??
-    user.idNumber ??
-    user.student_id ??
-    user.studentId ??
-    user.srcId ??
-    ""
-  ).trim();
-
-  const firstName = String(user.first_name ?? user.firstName ?? "").trim();
-  const middleName = String(user.middle_name ?? user.middleName ?? "").trim();
-  const lastName = String(user.last_name ?? user.lastName ?? "").trim();
-  const fullName = String(user.full_name ?? user.fullName ?? user.displayName ?? user.name ?? "").trim();
-
-  const hasId = Boolean(idNumber && idNumber !== "—" && idNumber !== "-" && idNumber.toUpperCase() !== "N/A" && idNumber.toUpperCase() !== "NONE");
+  const firstName = String(user.first_name ?? user.firstName ?? user.given_name ?? user.givenName ?? "").trim();
+  const middleName = String(user.middle_name ?? user.middleName ?? user.middleInitial ?? user.middle_initial ?? "").trim();
+  const lastName = String(user.last_name ?? user.lastName ?? user.surname ?? user.family_name ?? user.familyName ?? "").trim();
+  const fullName = String(user.full_name ?? user.fullName ?? user.displayName ?? user.display_name ?? user.name ?? "").trim();
+  const email = String(user.email ?? user.emailAddress ?? user.email_address ?? user.normalizedEmail ?? user.email_lower ?? "").trim();
 
   // Check if formatted name is comma-only, blank, or placeholder
   const isCommaOnlyName =
@@ -246,21 +297,46 @@ export function isValidRevieweeRecord(user: any): boolean {
     fullName.toUpperCase() === "UNKNOWN USER" ||
     fullName.toUpperCase() === "UNNAMED USER";
 
-  const hasName = Boolean((firstName || lastName || fullName) && !isCommaOnlyName);
+  const hasName = Boolean((firstName || lastName || fullName || email) && !isCommaOnlyName);
 
-  // A valid reviewee record MUST have both a non-blank ID and a valid (non-comma-only) name
-  return Boolean(hasId && hasName && !isCommaOnlyName);
+  return Boolean(hasName);
 }
 
 export function isValidUserRecord(user: any): boolean {
   if (!user) return false;
 
+  const idNumber = String(
+    user.seq_id ??
+    user.seqId ??
+    user.id_number ??
+    user.idNumber ??
+    user.srcId ??
+    user.src_id ??
+    user.student_id ??
+    user.studentId ??
+    user.revieweeId ??
+    user.reviewee_id ??
+    user.adminId ??
+    user.staffId ??
+    ""
+  ).trim();
+
+  const hasId = Boolean(
+    idNumber &&
+    idNumber !== "—" &&
+    idNumber !== "-" &&
+    idNumber.toUpperCase() !== "N/A" &&
+    idNumber.toUpperCase() !== "NONE"
+  );
+
+  // Users with an assigned sequence ID are always valid
+  if (hasId) {
+    return true;
+  }
+
   const status = String(user.accountStatus || user.status || "").toLowerCase();
   if (
-    status === "merged" ||
     status === "deleted" ||
-    status === "pending_profile" ||
-    status === "pending" ||
     user.isDeleted ||
     user.deleted ||
     user.is_deleted
@@ -268,24 +344,24 @@ export function isValidUserRecord(user: any): boolean {
     return false;
   }
 
-  const role = String(user.role || user.role_name || "").toLowerCase();
+  const role = String(user.role || user.role_name || user.userRole || "").toLowerCase();
   const isReviewee = role === "reviewee" || role === "student" || (!role && !user.isAdmin && !user.isStaff);
 
   if (isReviewee) {
     return isValidRevieweeRecord(user);
   }
 
-  const firstName = String(user.first_name ?? user.firstName ?? "").trim();
-  const lastName = String(user.last_name ?? user.lastName ?? "").trim();
-  const fullName = String(user.full_name ?? user.fullName ?? user.displayName ?? user.name ?? "").trim();
-  const email = String(user.email ?? "").trim();
+  const firstName = String(user.first_name ?? user.firstName ?? user.given_name ?? user.givenName ?? "").trim();
+  const lastName = String(user.last_name ?? user.lastName ?? user.surname ?? user.family_name ?? user.familyName ?? "").trim();
+  const fullName = String(user.full_name ?? user.fullName ?? user.displayName ?? user.display_name ?? user.name ?? "").trim();
+  const email = String(user.email ?? user.emailAddress ?? user.email_address ?? user.normalizedEmail ?? user.email_lower ?? "").trim();
 
   const isCommaOnlyName =
     (!lastName && !firstName && (!fullName || fullName === "," || fullName === ", " || fullName.trim() === ",")) ||
     fullName.trim() === "," ||
     fullName.trim() === ", ";
 
-  if (isCommaOnlyName) {
+  if (isCommaOnlyName && !email) {
     return false;
   }
 
@@ -339,14 +415,18 @@ export function resolveCanonicalUserIdentity(user: any): CanonicalUserIdentity {
   const idNumber = normalizeIdNumber(
     user.idNumber ??
     user.id_number ??
+    user.srcId ??
+    user.src_id ??
+    user.seq_id ??
+    user.seqId ??
+    user.student_id ??
+    user.studentId ??
     user.revieweeId ??
     user.reviewee_id ??
     user.staffId ??
     user.staff_id ??
     user.adminId ??
     user.admin_id ??
-    user.seq_id ??
-    user.seqId ??
     ""
   );
 
@@ -519,8 +599,16 @@ function mergeDuplicateUserRecords(prev: any, incoming: any): any {
     review_branch: incoming.review_branch || prev.review_branch || incoming.branch || prev.branch || "",
     branch: incoming.branch || prev.branch || incoming.review_branch || prev.review_branch || "",
     pin: incoming.pin || prev.pin || "",
-    accountStatus: (incoming.accountStatus && incoming.accountStatus !== 'merged') ? incoming.accountStatus : (prev.accountStatus || 'active'),
-    status: (incoming.status && incoming.status !== 'merged') ? incoming.status : (prev.status || 'active'),
+    accountStatus: (
+      incoming.accountStatus === 'dropped' || prev.accountStatus === 'dropped' ? 'dropped' :
+      incoming.accountStatus === 'active' || prev.accountStatus === 'active' || chosenSeqId ? 'active' :
+      (incoming.accountStatus && incoming.accountStatus !== 'merged') ? incoming.accountStatus : (prev.accountStatus || 'active')
+    ),
+    status: (
+      incoming.status === 'dropped' || prev.status === 'dropped' ? 'dropped' :
+      incoming.status === 'active' || prev.status === 'active' || chosenSeqId ? 'active' :
+      (incoming.status && incoming.status !== 'merged') ? incoming.status : (prev.status || 'active')
+    ),
   };
 }
 
@@ -542,14 +630,20 @@ export function deduplicateUsersByIdNumber<T = any>(users: T[]): T[] {
     const u = rawUser as any;
 
     const status = String(u.accountStatus || u.status || "").toLowerCase();
-    if (status === "merged" || status === "deleted" || u.isDeleted || u.deleted || u.is_deleted) {
+    const idKey = canonicalizeIdNumber(
+      u.seqId || u.seq_id || u.id_number || u.srcId || u.studentId || u.student_id
+    );
+
+    // Only skip if explicitly deleted, or if an empty tombstone with no ID and no email
+    if (status === "deleted" || u.isDeleted || u.deleted || u.is_deleted) {
+      continue;
+    }
+    if (status === "merged" && !idKey && !u.email && !u.email_lower && !u.firstName && !u.last_name) {
       continue;
     }
 
     const canonical = resolveCanonicalUserIdentity(u);
-    const idKey = canonicalizeIdNumber(
-      canonical.idNumber || u.seqId || u.seq_id || u.id_number || u.srcId || u.studentId || u.student_id
-    );
+    const finalIdKey = idKey || canonicalizeIdNumber(canonical.idNumber);
 
     const email = String(canonical.email || u.email || "").trim().toLowerCase();
     const uid = String(u.uid || u.id || u.doc_id || "").trim();
@@ -557,17 +651,17 @@ export function deduplicateUsersByIdNumber<T = any>(users: T[]): T[] {
       canonical.fullName || [canonical.firstName, canonical.lastName].filter(Boolean).join(' ')
     );
 
-    if (idKey) {
+    if (finalIdKey) {
       // 1. Group by unique ID number
-      if (!seenIds.has(idKey)) {
-        seenIds.set(idKey, u);
+      if (!seenIds.has(finalIdKey)) {
+        seenIds.set(finalIdKey, u);
       } else {
-        const existing = seenIds.get(idKey);
+        const existing = seenIds.get(finalIdKey);
         const merged = mergeDuplicateUserRecords(existing, u);
-        seenIds.set(idKey, merged);
+        seenIds.set(finalIdKey, merged);
       }
       if (normName && normName.length > 2) {
-        seenNames.set(normName, seenIds.get(idKey));
+        seenNames.set(normName, seenIds.get(finalIdKey));
       }
     } else if (normName && normName.length > 2 && seenNames.has(normName)) {
       // 2. Matches an existing record with the exact same full name

@@ -55,40 +55,38 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error('Failed to get access token from Firebase Auth');
-    }
-    cachedAccessToken = credential.accessToken;
+    const token = credential?.accessToken || (await result.user.getIdToken());
+    cachedAccessToken = token;
     
     await ensureUserDocument(result.user);
     
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error('Sign in error:', error);
+    
     if (
       error?.code === 'auth/unauthorized-domain' ||
-      error?.message?.includes('unauthorized-domain') ||
-      error?.code === 'auth/operation-not-allowed' ||
-      error?.code === 'auth/popup-blocked' ||
-      error?.code === 'auth/popup-closed-by-user'
+      error?.message?.includes('unauthorized-domain')
     ) {
-      console.warn("Google Sign-In popup restricted or unauthorized domain in preview. Using sandbox demo Google session.");
-      const mockUser = {
-        uid: "sandbox_google_user_" + Date.now(),
-        email: "arielpesalver1998@gmail.com",
-        displayName: "Reviewee Demo User",
-        emailVerified: true,
-        providerData: [{ providerId: 'google.com', email: "arielpesalver1998@gmail.com" }],
-        getIdToken: async () => "mock-id-token"
-      } as unknown as User;
-      cachedAccessToken = "mock-access-token";
-      try {
-        await ensureUserDocument(mockUser);
-      } catch (e) {
-        console.warn("Failed to ensure mock user doc:", e);
-      }
-      return { user: mockUser, accessToken: cachedAccessToken };
+      throw new Error(
+        "Domain unauthorized in Firebase Authentication. Please ensure 'srcreviewee.vercel.app' is added under Firebase Console > Authentication > Settings > Authorized domains."
+      );
     }
+    if (error?.code === 'auth/operation-not-allowed') {
+      throw new Error(
+        "Google Sign-In is not enabled in Firebase. Please enable the Google provider in Firebase Console > Authentication > Sign-in method."
+      );
+    }
+    if (error?.code === 'auth/popup-closed-by-user') {
+      throw new Error("Sign-in popup was closed before completing authentication. Please try again.");
+    }
+    if (error?.code === 'auth/popup-blocked') {
+      throw new Error("Sign-in popup was blocked by your browser. Please enable popups for this site and try again.");
+    }
+    if (error?.code === 'auth/cancelled-popup-request') {
+      throw new Error("Another sign-in window is already active. Please finish or close the active popup.");
+    }
+
     throw error;
   } finally {
     isSigningIn = false;

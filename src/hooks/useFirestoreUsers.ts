@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { firestoreDb } from '../utils/firebaseClient';
 import { logFirestoreError } from '../utils/firestoreErrorHandling';
-import { deduplicateUsersByIdNumber } from '../services/userIdentityResolver';
+import { deduplicateUsersByIdNumber, getUserAccountStatus } from '../services/userIdentityResolver';
 
 export function useFirestoreUsers() {
   const [allUsers, setAllUsers] = useState<any[]>([]);
@@ -21,6 +21,24 @@ export function useFirestoreUsers() {
           ...doc.data(),
         }));
 
+        // Diagnostic logger for admin dashboard visibility and status inspection
+        if (typeof window !== 'undefined') {
+          console.groupCollapsed(`[Admin Users Diagnostic] Fetched ${rawUsers.length} raw Firestore user docs`);
+          console.table(rawUsers.map((u: any) => ({
+            docId: u.uid || u.id,
+            email: u.email || u.normalizedEmail || '(none)',
+            name: `${u.first_name || u.firstName || ''} ${u.last_name || u.lastName || ''}`.trim() || u.name || '(none)',
+            role: u.role || u.userRole || 'Reviewee',
+            rawStatus: u.status || '(none)',
+            rawAccountStatus: u.accountStatus || '(none)',
+            computedStatus: getUserAccountStatus(u),
+            seqId: u.seqId || u.seq_id || u.id_number || u.srcId || '(none)',
+            isDeleted: Boolean(u.isDeleted || u.deleted),
+            mergedIntoUid: u.mergedIntoUid || '(none)',
+          })));
+          console.groupEnd();
+        }
+
         const uniqueUsers = deduplicateUsersByIdNumber(rawUsers);
         setAllUsers(uniqueUsers);
         setLoading(false);
@@ -37,3 +55,4 @@ export function useFirestoreUsers() {
 
   return { allUsers, loading, error };
 }
+

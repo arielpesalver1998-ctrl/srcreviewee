@@ -122,6 +122,10 @@ export async function resolveAuthenticatedAccount(firebaseUser: User): Promise<A
       email: cleanEmail,
       email_lower: cleanEmail,
       normalizedEmail: cleanEmail,
+      accountStatus: uidAccount.accountStatus === 'dropped' ? 'dropped' : 'active',
+      status: uidAccount.status === 'dropped' ? 'dropped' : 'active',
+      isDeleted: false,
+      deleted: false,
       lastLoginAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -171,6 +175,10 @@ export async function resolveAuthenticatedAccount(firebaseUser: User): Promise<A
       normalizedEmail: cleanEmail,
       role: existingAccount.role || existingRole, // Preserve role
       linkedAuthUid: firebaseUser.uid,
+      accountStatus: existingAccount.accountStatus === 'dropped' ? 'dropped' : 'active',
+      status: existingAccount.status === 'dropped' ? 'dropped' : 'active',
+      isDeleted: false,
+      deleted: false,
       lastLoginAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -196,8 +204,11 @@ export async function resolveAuthenticatedAccount(firebaseUser: User): Promise<A
         canonicalDocId: firebaseUser.uid,
         accountStatus: "active",
         status: "active",
+        isDeleted: false,
+        deleted: false,
       };
-      delete mergedFullDoc._ref;
+      delete (mergedFullDoc as any)._ref;
+      delete (mergedFullDoc as any).mergedIntoUid;
       batch.set(authUserRef, mergedFullDoc, { merge: true });
 
       // Mark the old unlinked document as merged so it never creates duplicate ID rows
@@ -221,6 +232,8 @@ export async function resolveAuthenticatedAccount(firebaseUser: User): Promise<A
       ...updatePayload,
       id: firebaseUser.uid,
       uid: firebaseUser.uid,
+      accountStatus: 'active',
+      status: 'active',
     };
 
     return {

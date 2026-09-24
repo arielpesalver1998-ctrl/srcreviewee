@@ -92,6 +92,12 @@ service cloud.firestore {
       }
     }
     
+    // Email uniqueness index
+    match /email_index/{email} {
+      allow read: if true;
+      allow write: if signedIn();
+    }
+
     // Counters - Public for registration logic
     match /counters/{id} {
       allow read, write: if true;

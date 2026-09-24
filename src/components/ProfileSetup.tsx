@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   GraduationCap,
@@ -23,10 +23,15 @@ import {
   ChevronRight,
   Sparkles,
   Clock,
-  Menu
+  Menu,
+  Lock,
+  Eye,
+  EyeOff,
+  ShieldCheck
 } from 'lucide-react';
 import { linkOrCreateUserRecord, findMatchingUnlinkedCandidates } from '../utils/idGenerator';
 import { auth, logout } from '../utils/auth';
+import { EmailAuthProvider, linkWithCredential } from 'firebase/auth';
 import { PortalLoading } from './PortalLoading';
 import { getFriendlyErrorMessage, FriendlyError } from '../utils/getFriendlyErrorMessage';
 import { maskEmail } from '../utils/stringUtils';
@@ -120,6 +125,17 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
   const [middleName, setMiddleName] = useState(initialData?.middleName || '');
   const [lastName, setLastName] = useState(initialData?.lastName || '');
   
+  // Password states (for linking to Google account)
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Check if Firebase Auth user already has password provider linked
+  const [hasPasswordLinked, setHasPasswordLinked] = useState<boolean>(() => {
+    return Boolean(auth.currentUser?.providerData?.some((p) => p.providerId === 'password'));
+  });
+
   // Searchable School State
   const [schoolInput, setSchoolInput] = useState(initialData?.schoolName || '');
   const [selectedSchool, setSelectedSchool] = useState(initialData?.schoolName || '');
@@ -145,6 +161,32 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
   const [userMatchChoice, setUserMatchChoice] = useState<'pending' | 'yes' | 'no'>('pending');
 
   const userEmail = auth.currentUser?.email || initialData?.email || 'reviewee@gmail.com';
+
+  // Password Requirements Checker (matching Create Account)
+  const passwordRequirements = useMemo(() => {
+    const value = password;
+    return [
+      { text: "At least 8 characters", met: value.length >= 8 },
+      { text: "At least one uppercase letter", met: /[A-Z]/.test(value) },
+      { text: "At least one lowercase letter", met: /[a-z]/.test(value) },
+      { text: "At least one number", met: /[0-9]/.test(value) },
+      { text: "At least one special character", met: /[^A-Za-z0-9]/.test(value) },
+      { text: "Passwords match", met: value !== "" && value === confirmPassword },
+    ];
+  }, [password, confirmPassword]);
+
+  const allRequirementsMet = useMemo(
+    () => passwordRequirements.every((req) => req.met),
+    [passwordRequirements]
+  );
+
+  // Re-check provider linked status if auth state changes
+  useEffect(() => {
+    if (auth.currentUser) {
+      const isLinked = auth.currentUser.providerData?.some((p) => p.providerId === 'password');
+      setHasPasswordLinked(Boolean(isLinked));
+    }
+  }, []);
 
   // Search for matching unlinked records when First Name & Last Name are provided
   useEffect(() => {
@@ -242,6 +284,17 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
       return;
     }
 
+    // Validate password if user hasn't already linked a password
+    if (!hasPasswordLinked) {
+      if (!allRequirementsMet) {
+        setError({
+          title: "Password Requirements",
+          message: "Please ensure all password requirements are satisfied before proceeding."
+        });
+        return;
+      }
+    }
+
     setLoading(true);
     setError(null);
 
@@ -251,6 +304,26 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
         throw new Error("No authenticated user found.");
       }
 
+      // 1. Link email/password credential to this SAME Google Firebase Auth user
+      if (!hasPasswordLinked && password) {
+        try {
+          const emailForAuth = user.email || initialData?.email || userEmail;
+          const credential = EmailAuthProvider.credential(emailForAuth, password);
+          await linkWithCredential(user, credential);
+          setHasPasswordLinked(true);
+        } catch (linkErr: any) {
+          console.warn("Password link result:", linkErr);
+          if (linkErr?.code === 'auth/provider-already-linked') {
+            setHasPasswordLinked(true);
+          } else if (linkErr?.code === 'auth/credential-already-in-use') {
+            // Credential already belongs to this or another account
+          } else {
+            throw linkErr;
+          }
+        }
+      }
+
+      // 2. Link or create user record in Firestore (NEVER writing password to Firestore)
       const res = await linkOrCreateUserRecord(
         user.uid,
         user.email || initialData?.email || "",
@@ -276,7 +349,7 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
   };
 
   const handleCopyId = () => {
-    const idToCopy = savedUserData?.seqId || savedUserData?.seq_id || 'SRC ID';
+    const idToCopy = savedUserData?.seqId || savedUserData?.seq_id || savedUserData?.srcId || 'SRC ID';
     if (navigator.clipboard) {
       navigator.clipboard.writeText(idToCopy);
       setCopiedId(true);
@@ -333,44 +406,42 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
           </div>
 
           {/* Stepper Bar */}
-          <div className="px-5 pt-4 pb-3 border-b border-slate-50 bg-slate-50/40">
-            <div className="flex items-center justify-between relative max-w-xs mx-auto">
-              {/* Connecting Lines */}
-              <div className="absolute top-3.5 left-4 right-4 h-0.5 bg-slate-200 -z-0">
-                <div
-                  className="h-full bg-[#007C89] transition-all duration-300"
-                  style={{
-                    width:
-                      currentStep === 1 ? '0%' :
-                      currentStep === 2 ? '33%' :
-                      currentStep === 3 ? '66%' : '100%',
-                  }}
-                />
-              </div>
+          <div className="px-6 py-4 bg-white border-b border-slate-100">
+            <div className="relative flex justify-between items-center max-w-xs mx-auto">
+              <div className="absolute left-0 top-3.5 w-full h-[2px] bg-slate-100 -z-0"></div>
+              <div
+                className="absolute left-0 top-3.5 h-[2px] bg-[#007b83] -z-0 transition-all duration-300"
+                style={{
+                  width:
+                    currentStep === 1 ? '0%' :
+                    currentStep === 2 ? '33.3%' :
+                    currentStep === 3 ? '66.6%' : '100%',
+                }}
+              ></div>
 
               {stepsList.map((s) => {
                 const isActive = currentStep === s.number;
                 const isCompleted = currentStep > s.number;
 
                 return (
-                  <div key={s.number} className="flex flex-col items-center gap-1 relative z-10">
+                  <div key={s.number} className="flex flex-col items-center gap-1.5 bg-white px-1.5 relative z-10">
                     <div
                       className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                         isActive
-                          ? 'bg-[#007C89] text-white ring-4 ring-teal-100 shadow-sm'
+                          ? 'bg-[#007b83] text-white shadow-sm'
                           : isCompleted
-                          ? 'bg-[#007C89] text-white shadow-xs'
-                          : 'bg-white border border-slate-300 text-slate-400'
+                          ? 'bg-teal-50 text-[#007b83] border border-teal-200 font-bold'
+                          : 'bg-slate-50 text-slate-400 border border-slate-200'
                       }`}
                     >
-                      {isCompleted ? <Check size={14} strokeWidth={3} /> : s.number}
+                      {s.number}
                     </div>
                     <span
-                      className={`text-[10px] tracking-tight transition-colors ${
+                      className={`text-[10px] transition-colors ${
                         isActive
-                          ? 'text-[#007C89] font-black'
+                          ? 'text-[#007b83] font-bold'
                           : isCompleted
-                          ? 'text-[#007C89] font-bold'
+                          ? 'text-[#007b83] font-medium'
                           : 'text-slate-400 font-medium'
                       }`}
                     >
@@ -537,7 +608,7 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
                               Existing Record Found
                             </span>
                             <p className="text-xs text-amber-950 font-bold">
-                              Found ID <span className="font-mono text-amber-800 font-black">{matchCandidate.seq_id || matchCandidate.seqId}</span> for:
+                              Found ID <span className="font-mono text-amber-800 font-black">{matchCandidate.seq_id || matchCandidate.seqId || matchCandidate.srcId}</span> for:
                             </p>
                             <p className="text-xs font-bold text-amber-900">
                               {(matchCandidate.first_name || matchCandidate.firstName || "").toUpperCase()} {(matchCandidate.last_name || matchCandidate.lastName || "").toUpperCase()}
@@ -588,7 +659,7 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
                       >
                         <div className="flex items-center gap-1.5 truncate">
                           <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
-                          <span className="truncate">Linking to ID: <strong className="font-mono">{matchCandidate.seq_id || matchCandidate.seqId}</strong></span>
+                          <span className="truncate">Linking to ID: <strong className="font-mono">{matchCandidate.seq_id || matchCandidate.seqId || matchCandidate.srcId}</strong></span>
                         </div>
                         <button
                           type="button"
@@ -733,6 +804,98 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
                     </AnimatePresence>
                   </div>
 
+                  {/* Password & Confirm Password Section (Required if user has not yet linked a password) */}
+                  {!hasPasswordLinked ? (
+                    <div className="space-y-3 pt-2 border-t border-slate-100">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                        <Lock size={14} className="text-[#007C89]" />
+                        <span>Set Account Password</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Set a secure password so you can also log in directly using your email address.
+                      </p>
+
+                      {/* Password Field */}
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          Password <span className="text-rose-500 font-bold">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            required
+                            placeholder="Create a password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-teal-500/20 pr-10 text-slate-900"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                          >
+                            {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Confirm Password Field */}
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          Confirm Password <span className="text-rose-500 font-bold">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showConfirmPassword ? "text" : "password"}
+                            required
+                            placeholder="Confirm your password"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-teal-500/20 pr-10 text-slate-900"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                          >
+                            {showConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Password Requirements List */}
+                      <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-1.5">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                          Password Requirements:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px]">
+                          {passwordRequirements.map((req, index) => (
+                            <div
+                              key={index}
+                              className={`flex items-center gap-1.5 ${
+                                req.met ? "text-emerald-700 font-semibold" : "text-slate-400"
+                              }`}
+                            >
+                              <span
+                                className={`w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 ${
+                                  req.met ? "bg-emerald-100 text-emerald-600" : "bg-slate-200 text-transparent"
+                                }`}
+                              >
+                                <Check size={10} strokeWidth={3} />
+                              </span>
+                              <span className="truncate">{req.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-2.5 flex items-center gap-2 text-emerald-800 text-xs font-semibold">
+                      <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
+                      <span>Password credentials already linked to this account.</span>
+                    </div>
+                  )}
+
                   {/* Required Info Notice */}
                   <div className="bg-sky-50/80 border border-sky-200/80 rounded-xl p-2.5 flex items-center gap-2 text-sky-800 text-xs font-medium">
                     <Info size={14} className="text-sky-600 shrink-0" />
@@ -752,7 +915,7 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
 
                     <button
                       type="submit"
-                      disabled={loading}
+                      disabled={loading || (!hasPasswordLinked && !allRequirementsMet)}
                       className="flex-1 py-3 bg-[#007C89] hover:bg-[#006873] active:scale-[0.99] text-white rounded-xl font-bold text-xs sm:text-sm transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                     >
                       {loading ? (
@@ -802,7 +965,7 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
                   </p>
                   <div className="flex items-center justify-center gap-2">
                     <span className="font-mono text-2xl sm:text-3xl font-black text-[#007C89] tracking-wider">
-                      {savedUserData?.seqId || savedUserData?.seq_id || 'SRC ID'}
+                      {savedUserData?.seqId || savedUserData?.seq_id || savedUserData?.srcId || 'SRC ID'}
                     </span>
                     <button
                       type="button"

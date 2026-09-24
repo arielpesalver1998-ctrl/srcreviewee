@@ -212,6 +212,8 @@ export async function linkOrCreateUserRecord(
         uid,
         authUid: uid,
         firebaseUid: uid,
+        id: uid,
+        doc_id: uid,
         email: cleanEmail,
         email_lower: cleanEmail,
         normalizedEmail: cleanEmail,
@@ -229,7 +231,12 @@ export async function linkOrCreateUserRecord(
         branch: reviewBranch || oldRecord.branch,
         srcId: existingSeqId,
         seq_id: existingSeqId,
+        seqId: existingSeqId,
+        id_number: existingSeqId,
+        idNumber: existingSeqId,
         role: oldRecord.role || "Reviewee",
+        userRole: oldRecord.role || "Reviewee",
+        status: "active",
         accountStatus: "active",
         profileCompleted: true,
         registrationMethod: registrationSource,
@@ -265,6 +272,8 @@ export async function linkOrCreateUserRecord(
         uid,
         authUid: uid,
         firebaseUid: uid,
+        id: uid,
+        doc_id: uid,
         email: cleanEmail,
         email_lower: cleanEmail,
         normalizedEmail: cleanEmail,
@@ -282,7 +291,12 @@ export async function linkOrCreateUserRecord(
         branch: reviewBranch,
         srcId: newSeqId,
         seq_id: newSeqId,
+        seqId: newSeqId,
+        id_number: newSeqId,
+        idNumber: newSeqId,
         role: "Reviewee",
+        userRole: "Reviewee",
+        status: "active",
         accountStatus: "active",
         profileCompleted: true,
         registrationMethod: registrationSource,
@@ -293,7 +307,7 @@ export async function linkOrCreateUserRecord(
         updated_at: timestamp
       };
 
-      await setDoc(doc(db, "users", uid), newRecordData);
+      await setDoc(doc(db, "users", uid), newRecordData, { merge: true });
 
       return {
         status: 'active',
@@ -328,30 +342,39 @@ export async function linkOrCreateUserRecord(
     if (matchResult.matchType === 'perfect' && matchResult.matchedRecord) {
       const oldRecord = matchResult.matchedRecord;
       const oldDocId = oldRecord.id;
-      const existingSeqId = oldRecord.seq_id || oldRecord.seqId || "";
+      const existingSeqId = oldRecord.seq_id || oldRecord.seqId || oldRecord.srcId || oldRecord.id_number || "";
 
       // Copy historical record to new users/{uid} document with active status and merged keys
       const mergedData = {
         ...oldRecord, // preserve all scores, logs, and historical fields
         uid,
+        authUid: uid,
+        firebaseUid: uid,
+        id: uid,
+        doc_id: uid,
         email: cleanEmail,
         email_lower: cleanEmail,
         normalizedEmail: cleanEmail,
-        firstName,
-        first_name: uFirstName,
-        middleName,
-        middle_name: normalizeStr(middleName),
-        lastName,
-        last_name: uLastName,
-        schoolName,
-        school_name: normalizeStr(schoolName),
-        school: schoolName,
-        reviewBranch,
-        review_branch: normalizeStr(reviewBranch),
-        branch: reviewBranch,
+        firstName: firstName || oldRecord.firstName || oldRecord.first_name,
+        first_name: uFirstName || oldRecord.first_name,
+        middleName: middleName || oldRecord.middleName || oldRecord.middle_name,
+        middle_name: normalizeStr(middleName) || oldRecord.middle_name,
+        lastName: lastName || oldRecord.lastName || oldRecord.last_name,
+        last_name: uLastName || oldRecord.last_name,
+        schoolName: schoolName || oldRecord.schoolName || oldRecord.school_name,
+        school_name: normalizeStr(schoolName) || oldRecord.school_name,
+        school: schoolName || oldRecord.school,
+        reviewBranch: reviewBranch || oldRecord.reviewBranch || oldRecord.review_branch,
+        review_branch: normalizeStr(reviewBranch) || oldRecord.review_branch,
+        branch: reviewBranch || oldRecord.branch,
         srcId: existingSeqId,
         seq_id: existingSeqId,
+        seqId: existingSeqId,
+        id_number: existingSeqId,
+        idNumber: existingSeqId,
         role: oldRecord.role || "Reviewee",
+        userRole: oldRecord.role || "Reviewee",
+        status: "active",
         accountStatus: "active",
         profileCompleted: true,
         registrationMethod: registrationSource,
@@ -363,13 +386,15 @@ export async function linkOrCreateUserRecord(
       };
 
       // Perform write-then-delete atomically using transactional operations or standard calls
-      await setDoc(doc(db, "users", uid), mergedData);
+      await setDoc(doc(db, "users", uid), mergedData, { merge: true });
       
       // Delete old unlinked record
-      try {
-        await deleteDoc(doc(db, "users", oldDocId));
-      } catch (delErr) {
-        console.warn("Failed to delete old unlinked record, but merged copy is written:", delErr);
+      if (oldDocId && oldDocId !== uid) {
+        try {
+          await deleteDoc(doc(db, "users", oldDocId));
+        } catch (delErr) {
+          console.warn("Failed to delete old unlinked record, but merged copy is written:", delErr);
+        }
       }
 
       return {
@@ -383,6 +408,10 @@ export async function linkOrCreateUserRecord(
       // Pending status for manual confirmation
       const pendingData = {
         uid,
+        authUid: uid,
+        firebaseUid: uid,
+        id: uid,
+        doc_id: uid,
         email: cleanEmail,
         email_lower: cleanEmail,
         normalizedEmail: cleanEmail,
@@ -399,16 +428,21 @@ export async function linkOrCreateUserRecord(
         review_branch: normalizeStr(reviewBranch),
         branch: reviewBranch,
         role: "Reviewee",
+        userRole: "Reviewee",
+        status: "pending_verification",
         accountStatus: "pending_verification",
         createdAt: timestamp,
         created_at: timestamp,
         updatedAt: timestamp,
         updated_at: timestamp,
         srcId: "",
-        seq_id: ""
+        seq_id: "",
+        seqId: "",
+        id_number: "",
+        idNumber: ""
       };
 
-      await setDoc(doc(db, "users", uid), pendingData);
+      await setDoc(doc(db, "users", uid), pendingData, { merge: true });
 
       return {
         status: 'pending_verification',
@@ -423,6 +457,10 @@ export async function linkOrCreateUserRecord(
 
       const newRecordData = {
         uid,
+        authUid: uid,
+        firebaseUid: uid,
+        id: uid,
+        doc_id: uid,
         email: cleanEmail,
         email_lower: cleanEmail,
         normalizedEmail: cleanEmail,
@@ -440,7 +478,12 @@ export async function linkOrCreateUserRecord(
         branch: reviewBranch,
         srcId: newSeqId,
         seq_id: newSeqId,
+        seqId: newSeqId,
+        id_number: newSeqId,
+        idNumber: newSeqId,
         role: "Reviewee",
+        userRole: "Reviewee",
+        status: "active",
         accountStatus: "active",
         profileCompleted: true,
         registrationMethod: registrationSource,
@@ -451,7 +494,7 @@ export async function linkOrCreateUserRecord(
         updated_at: timestamp
       };
 
-      await setDoc(doc(db, "users", uid), newRecordData);
+      await setDoc(doc(db, "users", uid), newRecordData, { merge: true });
 
       return {
         status: 'active',
