@@ -10,6 +10,8 @@ import { getUserAccountStatus } from '../services/userIdentityResolver';
 import { compressAndConvertToBase64 } from '../utils/imageUtils';
 import { UserAvatar } from './UserAvatar';
 import { AdminFolderSyncViewer } from './AdminFolderSyncViewer';
+import { GmailIcon } from './GmailIcon';
+import { openGmailApp } from '../utils/emailAppLauncher';
 
 interface ProfileDashboardProps {
   currentUser: any;
@@ -213,9 +215,21 @@ export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ currentUser,
       </div>
 
       {successMsg && (
-        <div className="p-3 sm:p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-2.5 text-xs font-bold">
-          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-          <span>{successMsg}</span>
+        <div className="p-3 sm:p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-bold">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+            <span>{successMsg}</span>
+          </div>
+          {successMsg.toLowerCase().includes('password reset') && (
+            <button
+              type="button"
+              onClick={() => openGmailApp(email || currentUser?.email)}
+              className="px-3 py-1.5 bg-white border border-emerald-300 hover:border-emerald-500 rounded-xl text-emerald-900 font-extrabold flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer shrink-0 active:scale-95"
+            >
+              <GmailIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>Open Gmail App</span>
+            </button>
+          )}
         </div>
       )}
 

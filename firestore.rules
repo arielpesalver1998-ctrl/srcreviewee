@@ -66,7 +66,13 @@ service cloud.firestore {
 
     match /audit_logs/{id} {
       allow create: if isAdminLike();
-      allow read: if isAdmin();
+      allow read: if isAdminLike();
+      allow update, delete: if false;
+    }
+
+    match /activity_logs/{id} {
+      allow create: if isAdminLike();
+      allow read: if isAdminLike();
       allow update, delete: if false;
     }
 

@@ -31,6 +31,7 @@ import {
   Bell,
   AlertCircle,
   Building2,
+  Activity,
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { firestoreDb } from '../utils/firebaseClient';
@@ -52,6 +53,8 @@ import { ProfileDashboard } from './ProfileDashboard';
 import { downloadRegisteredUsersCsv } from '../utils/exportUsersCsv';
 import { deduplicateUsersByIdNumber } from '../services/userIdentityResolver';
 import { DuplicateResolver } from './DuplicateResolver';
+import { ActivityLogTab } from './ActivityLogTab';
+import { logProfileModification } from '../services/activityLogService';
 
 interface AdminDashboardProps {
   currentUser: any;
@@ -71,6 +74,7 @@ export type AdminTab =
   | 'leaderboard' 
   | 'school-mappings' 
   | 'duplicate-resolver' 
+  | 'activity-log'
   | 'audit-log' 
   | 'grades' 
   | 'qr-scanner' 
@@ -188,6 +192,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const isPending = targetStatus === 'pending_profile' || targetStatus === 'pending';
       const isDropped = targetStatus === 'dropped';
 
+      const oldUser = allUsers.find(u => (u.uid || u.id || u.doc_id) === targetId) || editingUser || {};
+      const newPayload = {
+        ...oldUser,
+        ...updatedData,
+        seqId: cleanSeqId,
+        seq_id: cleanSeqId,
+        idNumber: cleanSeqId,
+        id_number: cleanSeqId,
+        srcId: cleanSeqId,
+        src_id: cleanSeqId,
+        role: updatedRole,
+        userRole: updatedRole,
+        status: targetStatus,
+        accountStatus: targetStatus,
+      };
+
       await updateDoc(docRef, {
         firstName: updatedData.firstName || '',
         first_name: (updatedData.firstName || '').toUpperCase(),
@@ -206,11 +226,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         src_id: cleanSeqId,
         studentId: cleanSeqId,
         student_id: cleanSeqId,
+        school: updatedData.school || updatedData.schoolName || '',
+        school_name: updatedData.school_name || updatedData.schoolName || updatedData.school || '',
+        branch: updatedData.branch || updatedData.reviewBranch || '',
+        review_branch: updatedData.review_branch || updatedData.reviewBranch || updatedData.branch || '',
         status: targetStatus,
         accountStatus: targetStatus,
         profileCompleted: isPending ? false : isDropped ? false : true,
         updatedAt: new Date().toISOString(),
       });
+
+      // Realtime Activity Log Recording
+      await logProfileModification({
+        editor: currentUser,
+        oldUser,
+        updatedUser: newPayload,
+      });
+
       setActionNotice(`User ${updatedData.firstName} ${updatedData.lastName} updated successfully.`);
       setTimeout(() => setActionNotice(null), 4000);
     } catch (err: any) {
@@ -234,7 +266,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     { key: 'leaderboard', label: 'Leaderboard', icon: <Trophy size={18} /> },
     { key: 'school-mappings', label: 'School Mappings', icon: <GraduationCap size={18} /> },
     { key: 'duplicate-resolver', label: 'Duplicate Resolver', icon: <Users2 size={18} /> },
-    { key: 'audit-log', label: 'Audit Log', icon: <Shield size={18} /> },
+    { key: 'activity-log', label: 'Activity Log', icon: <Activity size={18} /> },
     { key: 'grades', label: 'Grade Weights', icon: <Sliders size={18} /> },
     { key: 'folders', label: 'Sync & Settings', icon: <RefreshCw size={18} /> },
   ];
@@ -705,34 +737,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           />
         )}
 
-        {/* AUDIT LOG TAB */}
-        {activeTab === 'audit-log' && (
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-4 sm:p-6 shadow-sm">
-            <div className="mb-4">
-              <h2 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
-                <Shield className="text-teal-600" size={22} /> Administrative System Audit Log
-              </h2>
-              <p className="text-xs text-slate-500 font-medium mt-1">
-                Chronological trail of user profile modifications, score folder updates, and permission changes.
-              </p>
-            </div>
-            <div className="space-y-2">
-              {[
-                { action: 'Folder Sync Completed', target: 'Pre-Board Diagnostic 2026', time: 'Just now', user: displayName },
-                { action: 'CSV Export Initiated', target: 'Registered Users Directory', time: '10 mins ago', user: displayName },
-                { action: 'Grade Weights Verified', target: '7 Criminology Evaluation Areas', time: '1 hour ago', user: 'System' },
-                { action: 'Attendance QR Verified', target: 'Main Lecture Hall Scanner', time: 'Today 08:30 AM', user: 'Staff' },
-              ].map((item, iIdx) => (
-                <div key={iIdx} className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-bold text-slate-900">{item.action}</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">{item.target} • by {item.user}</p>
-                  </div>
-                  <span className="text-[10px] font-mono text-slate-400 font-medium">{item.time}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+        {/* ACTIVITY & AUDIT LOG TAB */}
+        {(activeTab === 'activity-log' || activeTab === 'audit-log') && (
+          <ActivityLogTab
+            currentUser={currentUser}
+            onEditUser={(user) => setEditingUser(user)}
+          />
         )}
 
         {/* NOTIFICATIONS TAB */}

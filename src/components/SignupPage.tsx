@@ -7,6 +7,7 @@ import { linkOrCreateUserRecord, findMatchingUnlinkedCandidates } from '../utils
 import { PortalLoading } from './PortalLoading';
 import { normalizeEmail, maskEmail } from '../utils/stringUtils';
 import { GmailIcon } from './GmailIcon';
+import { openGmailApp } from '../utils/emailAppLauncher';
 
 const GoogleIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
   <svg
@@ -700,23 +701,26 @@ export function SignupPage({ onSuccess, onToggleLogin }: SignupPageProps) {
                 <p>
                   To open and confirm this account, log in using the registered email address:
                 </p>
-                <div className="bg-white dark:bg-emerald-900/40 p-2.5 rounded-xl border border-emerald-300 dark:border-emerald-700 font-mono font-extrabold text-xs text-emerald-900 dark:text-emerald-100 flex items-center gap-2">
+                <div 
+                  onClick={() => openGmailApp(matchCandidate.email || matchCandidate.email_lower || email || '')}
+                  title="Click to Open Gmail App"
+                  className="bg-white dark:bg-emerald-900/40 p-2.5 rounded-xl border border-emerald-300 dark:border-emerald-700 font-mono font-extrabold text-xs text-emerald-900 dark:text-emerald-100 flex items-center gap-2 cursor-pointer hover:border-emerald-500 transition-all shadow-sm active:scale-[0.99]"
+                >
                   <Mail size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <span>{maskEmail(matchCandidate.email || matchCandidate.email_lower || email || '')}</span>
                 </div>
                 <p className="text-[11px] text-emerald-800 dark:text-emerald-200 font-semibold pt-0.5">
                   We sent an email to confirm login. Please check your inbox or sign in using this email address to proceed.
                 </p>
-                <a
-                  href="https://mail.google.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-2 w-full py-2 px-3 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 hover:border-emerald-500 rounded-xl font-bold text-xs text-emerald-950 dark:text-emerald-100 flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all group"
+                <button
+                  type="button"
+                  onClick={() => openGmailApp(matchCandidate.email || matchCandidate.email_lower || email || '')}
+                  className="mt-2 w-full py-2 px-3 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 hover:border-emerald-500 rounded-xl font-bold text-xs text-emerald-950 dark:text-emerald-100 flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all group active:scale-[0.99]"
                 >
                   <GmailIcon className="w-4 h-4 shrink-0" />
-                  <span>Open Gmail Inbox</span>
+                  <span>Open Gmail App</span>
                   <ExternalLink size={12} className="text-emerald-600 dark:text-emerald-400 group-hover:text-emerald-800 dark:group-hover:text-emerald-200" />
-                </a>
+                </button>
               </div>
             </motion.div>
           )}
@@ -946,7 +950,13 @@ export function SignupPage({ onSuccess, onToggleLogin }: SignupPageProps) {
                 placeholder="Repeat password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className={inputBase + " pr-11"}
+                className={`${inputBase} pr-11 ${
+                  confirmPassword && password
+                    ? confirmPassword === password
+                      ? "border-emerald-500 focus:border-emerald-600 ring-1 ring-emerald-500/20"
+                      : "border-rose-400 focus:border-rose-500 ring-1 ring-rose-500/20"
+                    : ""
+                }`}
               />
               <button
                 type="button"
@@ -959,11 +969,44 @@ export function SignupPage({ onSuccess, onToggleLogin }: SignupPageProps) {
           </div>
         </div>
 
-        {/* Password Requirements List */}
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/60">
-          <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            Password Requirements
-          </p>
+        {/* Confirm Password Status & Reminder Box */}
+        {password && (
+          <div className="text-[11px] font-bold">
+            {confirmPassword ? (
+              confirmPassword === password ? (
+                <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
+                  <CheckCircle2 size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>Passwords match perfectly.</span>
+                </div>
+              ) : (
+                <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 rounded-xl text-rose-800 dark:text-rose-200 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 animate-ping" />
+                  <span>Passwords do not match yet. Please retype identical password.</span>
+                </div>
+              )
+            ) : (
+              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-200 flex items-center gap-2">
+                <span className="text-amber-600 font-bold shrink-0">Reminder:</span>
+                <span>Please re-enter your password in "Confirm Password" to complete this step.</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Password Requirements & Step Checklist Box */}
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-900/60 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+              Password Security Checklist
+            </p>
+            <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+              allRequirementsMet 
+                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400"
+            }`}>
+              {passwordRequirements.filter(r => r.met).length} of {passwordRequirements.length} Met
+            </span>
+          </div>
 
           <div className="grid gap-2 sm:grid-cols-2">
             {passwordRequirements.map((req) => (

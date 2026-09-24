@@ -3,6 +3,7 @@ import { X, Trash2, AlertTriangle, Loader2, ShieldAlert, User, Mail, Hash, Shiel
 import { motion, AnimatePresence } from 'motion/react';
 import { getUserRole } from '../utils/roleUtils';
 import { getAuth } from 'firebase/auth';
+import { logProfileModification } from '../services/activityLogService';
 
 export interface DeleteUserTarget {
   authUid: string;
@@ -121,6 +122,14 @@ export const DeleteUserModal: React.FC<DeleteUserModalProps> = ({
       if (!response.ok || !data.success) {
         throw new Error(data.error || 'Failed to delete user account.');
       }
+
+      await logProfileModification({
+        editor: currentUser,
+        oldUser: user,
+        updatedUser: null,
+        customActionType: 'user_deleted',
+        details: `Account ${displayName} (${idNumber || 'No ID'}) was deleted by administrator.`,
+      });
 
       onSuccess(authUid, profileDocumentId, displayName);
       onClose();

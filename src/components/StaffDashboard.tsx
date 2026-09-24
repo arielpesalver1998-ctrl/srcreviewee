@@ -33,6 +33,7 @@ import { StatCard } from './DashboardKit';
 import { PortalLayout } from './PortalLayout';
 import { ProfileDashboard } from './ProfileDashboard';
 import { deduplicateUsersByIdNumber } from '../services/userIdentityResolver';
+import { logProfileModification } from '../services/activityLogService';
 
 interface StaffDashboardProps {
   currentUser: any;
@@ -115,6 +116,22 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
       const isPending = targetStatus === 'pending_profile' || targetStatus === 'pending';
       const isDropped = targetStatus === 'dropped';
 
+      const oldUser = allUsers.find(u => (u.uid || u.id || u.doc_id) === targetId) || editingUser || {};
+      const newPayload = {
+        ...oldUser,
+        ...updatedData,
+        seqId: cleanSeqId,
+        seq_id: cleanSeqId,
+        idNumber: cleanSeqId,
+        id_number: cleanSeqId,
+        srcId: cleanSeqId,
+        src_id: cleanSeqId,
+        role: updatedData.role || 'Reviewee',
+        userRole: updatedData.role || 'Reviewee',
+        status: targetStatus,
+        accountStatus: targetStatus,
+      };
+
       await updateDoc(docRef, {
         firstName: updatedData.firstName || '',
         first_name: (updatedData.firstName || '').toUpperCase(),
@@ -133,11 +150,23 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
         src_id: cleanSeqId,
         studentId: cleanSeqId,
         student_id: cleanSeqId,
+        school: updatedData.school || updatedData.schoolName || '',
+        school_name: updatedData.school_name || updatedData.schoolName || updatedData.school || '',
+        branch: updatedData.branch || updatedData.reviewBranch || '',
+        review_branch: updatedData.review_branch || updatedData.reviewBranch || updatedData.branch || '',
         status: targetStatus,
         accountStatus: targetStatus,
         profileCompleted: isPending ? false : isDropped ? false : true,
         updatedAt: new Date().toISOString(),
       });
+
+      // Realtime Activity Log Recording
+      await logProfileModification({
+        editor: currentUser,
+        oldUser,
+        updatedUser: newPayload,
+      });
+
       setActionNotice(`Reviewee ${updatedData.firstName} ${updatedData.lastName} updated successfully.`);
       setTimeout(() => setActionNotice(null), 4000);
     } catch (err: any) {

@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Mail, RefreshCw, Loader2, LogOut, ExternalLink, CheckCircle2, Inbox } from 'lucide-react';
 import { GmailIcon } from './GmailIcon';
+import { openGmailApp } from '../utils/emailAppLauncher';
 
 interface ResendVerificationProps {
   email: string | null | undefined;
@@ -28,14 +29,19 @@ export const ResendVerification: React.FC<ResendVerificationProps> = ({
       className="bg-white/90 dark:bg-[#0B1220]/90 backdrop-blur-md border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 sm:p-10 shadow-2xl space-y-6 max-w-md w-full text-center flex flex-col items-center"
     >
       {/* Icon Badge */}
-      <div className="relative">
-        <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-teal-500/10 via-teal-50 to-emerald-50 dark:from-teal-950/40 dark:to-emerald-950/20 border border-teal-200/60 dark:border-teal-800/60 flex items-center justify-center text-teal-600 dark:text-[#00B8A9] shadow-inner">
+      <button
+        type="button"
+        onClick={() => openGmailApp(email || undefined)}
+        title="Open Gmail App"
+        className="relative group cursor-pointer transition-transform hover:scale-105 active:scale-95 border-none bg-transparent"
+      >
+        <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-teal-500/10 via-teal-50 to-emerald-50 dark:from-teal-950/40 dark:to-emerald-950/20 border border-teal-200/60 dark:border-teal-800/60 flex items-center justify-center text-teal-600 dark:text-[#00B8A9] shadow-inner group-hover:border-teal-400">
           <GmailIcon className="w-10 h-10 shrink-0" />
         </div>
-        <div className="absolute -bottom-1 -right-1 bg-teal-600 text-white p-1.5 rounded-full shadow-md border-2 border-white dark:border-[#0B1220]">
+        <div className="absolute -bottom-1 -right-1 bg-teal-600 text-white p-1.5 rounded-full shadow-md border-2 border-white dark:border-[#0B1220] group-hover:bg-teal-500">
           <Mail size={12} />
         </div>
-      </div>
+      </button>
 
       {/* Header */}
       <div className="space-y-1.5">
@@ -49,7 +55,11 @@ export const ResendVerification: React.FC<ResendVerificationProps> = ({
       </div>
 
       {/* Email Indicator Card */}
-      <div className="w-full bg-slate-50 dark:bg-slate-900/80 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 text-left">
+      <div 
+        onClick={() => openGmailApp(email || undefined)}
+        title="Click to Open Gmail App"
+        className="w-full bg-slate-50 hover:bg-slate-100/80 dark:bg-slate-900/80 dark:hover:bg-slate-900 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 text-left cursor-pointer transition-all active:scale-[0.99]"
+      >
         <div className="min-w-0 flex-1">
           <span className="text-[10px] uppercase font-extrabold text-slate-400 dark:text-slate-500 block">
             Registered Email Address
@@ -81,24 +91,11 @@ export const ResendVerification: React.FC<ResendVerificationProps> = ({
       {/* Quick Action: Open Gmail */}
       <button
         type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          const mobileIntent = 'googlegmail://';
-          const webUrl = 'https://mail.google.com';
-          const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-          if (isMobile) {
-            window.location.href = mobileIntent;
-            setTimeout(() => {
-              window.open(webUrl, '_blank', 'noopener,noreferrer');
-            }, 600);
-          } else {
-            window.open(webUrl, '_blank', 'noopener,noreferrer');
-          }
-        }}
-        className="w-full py-3.5 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-teal-500 dark:hover:border-teal-400 text-slate-800 dark:text-white rounded-2xl font-extrabold text-xs tracking-wide uppercase transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-3 cursor-pointer group"
+        onClick={() => openGmailApp(email || undefined)}
+        className="w-full py-3.5 px-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-teal-500 dark:hover:border-teal-400 text-slate-800 dark:text-white rounded-2xl font-extrabold text-xs tracking-wide uppercase transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-3 cursor-pointer group active:scale-[0.99]"
       >
         <GmailIcon className="w-5 h-5 shrink-0" />
-        <span>Open Gmail Inbox</span>
+        <span>Open Gmail App</span>
         <ExternalLink size={14} className="text-slate-400 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors" />
       </button>
 

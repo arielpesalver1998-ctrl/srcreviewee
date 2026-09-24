@@ -8,6 +8,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { PortalLoading } from './PortalLoading';
 import { normalizeEmail } from '../utils/stringUtils';
 import { GmailIcon } from './GmailIcon';
+import { openGmailApp } from '../utils/emailAppLauncher';
 
 const GoogleIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
   <svg
@@ -352,54 +353,79 @@ export function LoginPage({ onSuccess, onToggleSignup }: LoginPageProps) {
         </motion.div>
       )}
 
-      {/* Password Reset Notification Card / Alert Message */}
+      {/* Password Reset Notification Card / Alert Message & Steps */}
       {message && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/80 text-emerald-950 dark:text-emerald-100 p-4 sm:p-5 rounded-2xl shadow-md relative overflow-hidden space-y-3"
+          className="bg-emerald-50/90 dark:bg-emerald-950/40 border-2 border-emerald-300 dark:border-emerald-700 text-emerald-950 dark:text-emerald-100 p-4 sm:p-5 rounded-3xl shadow-lg relative overflow-hidden space-y-3"
         >
           <div className="flex items-start gap-3">
-            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/60 rounded-xl text-emerald-600 dark:text-emerald-400 shrink-0">
+            <button
+              type="button"
+              onClick={() => openGmailApp(resetEmailSent || undefined)}
+              title="Open Gmail App"
+              className="p-2.5 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-900/80 dark:hover:bg-emerald-800 rounded-2xl text-emerald-600 dark:text-emerald-300 shrink-0 transition-all cursor-pointer shadow-sm active:scale-95 border border-emerald-300 dark:border-emerald-700"
+            >
               <Mail className="w-5 h-5 animate-bounce" />
-            </div>
-            <div className="space-y-1.5 flex-1">
-              <h4 className="font-bold text-xs uppercase tracking-wider text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Password Reset Email Sent
-              </h4>
-              <p className="text-xs text-emerald-800 dark:text-emerald-300 leading-relaxed font-medium">
-                {message}
-              </p>
+            </button>
+            <div className="space-y-2 flex-1">
+              <div>
+                <h4 className="font-extrabold text-xs uppercase tracking-wider text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Password Reset Email Sent
+                </h4>
+                <p className="text-xs text-emerald-800 dark:text-emerald-300 leading-relaxed font-semibold mt-0.5">
+                  {message}
+                </p>
+              </div>
+
               {resetEmailSent && (
-                <div className="mt-2 bg-white/80 dark:bg-slate-900/80 p-3 rounded-xl border border-emerald-200 dark:border-emerald-900/50 text-xs space-y-2 shadow-inner">
-                  <div className="flex items-center justify-between text-slate-700 dark:text-slate-200 font-semibold">
-                    <span>Target Email:</span>
-                    <span className="font-mono text-emerald-700 dark:text-emerald-300 font-bold break-all">{resetEmailSent}</span>
+                <div className="bg-white/90 dark:bg-slate-900/90 p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-800/80 text-xs space-y-3 shadow-sm">
+                  <div className="flex items-center justify-between text-slate-700 dark:text-slate-200 font-bold pb-2 border-b border-slate-100 dark:border-slate-800">
+                    <span className="text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Target Email:</span>
+                    <span className="font-mono text-emerald-700 dark:text-emerald-300 font-extrabold break-all text-xs">{resetEmailSent}</span>
                   </div>
-                  <div className="text-[11px] text-slate-600 dark:text-slate-400 space-y-1 pt-1.5 border-t border-slate-200 dark:border-slate-800">
-                    <p className="flex items-center gap-1.5 font-medium">
-                      <Inbox className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> Check your <strong>Inbox</strong> and <strong>Spam / Junk</strong> folder.
+
+                  {/* Step-by-Step Instructions */}
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                      <Inbox className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> Follow these steps to reset:
                     </p>
-                    <p>• Password reset links usually arrive within 1–2 minutes.</p>
-                    <p>• If using strict network filters or adblockers, allow messages from Samaritan Review Center.</p>
+                    <ol className="space-y-1 text-[11px] text-slate-700 dark:text-slate-300 font-medium">
+                      <li className="flex items-start gap-1.5">
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400 shrink-0">Step 1:</span>
+                        <span>Open your Gmail app or email inbox.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400 shrink-0">Step 2:</span>
+                        <span>Find the email from <strong>Samaritan Review Center</strong> (check <em>Spam / Junk</em> if missing).</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400 shrink-0">Step 3:</span>
+                        <span>Click the reset link in the email to set a new password.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400 shrink-0">Step 4:</span>
+                        <span>Return here and log in with your updated password.</span>
+                      </li>
+                    </ol>
                   </div>
                   
                   {/* Direct Open Gmail Button */}
-                  <a
-                    href="https://mail.google.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full mt-2 py-2.5 px-3 bg-white dark:bg-slate-900 border-2 border-emerald-400 dark:border-emerald-600 hover:border-emerald-600 dark:hover:border-emerald-400 rounded-xl font-bold text-xs text-slate-800 dark:text-slate-100 flex items-center justify-center gap-2.5 shadow-sm cursor-pointer transition-all group"
+                  <button
+                    type="button"
+                    onClick={() => openGmailApp(resetEmailSent)}
+                    className="w-full py-2.5 px-3 bg-teal-600 hover:bg-teal-700 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all group active:scale-[0.99]"
                   >
                     <GmailIcon className="w-4 h-4 shrink-0" />
-                    <span>Open Gmail to Reset Password</span>
-                    <ExternalLink size={12} className="text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200" />
-                  </a>
+                    <span>Open Gmail App to Reset Password</span>
+                    <ExternalLink size={12} className="text-white/80 group-hover:text-white" />
+                  </button>
                 </div>
               )}
             </div>
           </div>
-          <div className="flex justify-end pt-1">
+          <div className="flex justify-end pt-0.5">
             <button
               type="button"
               onClick={() => { setMessage(null); setResetEmailSent(null); }}

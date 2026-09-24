@@ -120,10 +120,11 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
   // Step state (1: Connect, 2: Profile, 3: ID, 4: Welcome)
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
 
-  // Form states
-  const [firstName, setFirstName] = useState(() => (initialData?.firstName ? String(initialData.firstName).toUpperCase() : ''));
-  const [middleName, setMiddleName] = useState(() => (initialData?.middleName ? String(initialData.middleName).toUpperCase() : ''));
-  const [lastName, setLastName] = useState(() => (initialData?.lastName ? String(initialData.lastName).toUpperCase() : ''));
+  // Form states - start blank by default so user enters legal name in UPPERCASE
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   
   // Password states (for linking to Google account)
   const [password, setPassword] = useState('');
@@ -220,14 +221,11 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
     return () => clearTimeout(timer);
   }, [firstName, lastName]);
 
-  // Seed initialData only ONCE on mount if initialData was loaded asynchronously
+  // Seed school/branch only ONCE on mount if initialData was loaded asynchronously
   useEffect(() => {
     if (initializedRef.current) return;
     if (initialData) {
       initializedRef.current = true;
-      if (initialData.firstName) setFirstName(String(initialData.firstName).toUpperCase());
-      if (initialData.middleName) setMiddleName(String(initialData.middleName).toUpperCase());
-      if (initialData.lastName) setLastName(String(initialData.lastName).toUpperCase());
       if (initialData.schoolName) {
         setSelectedSchool(initialData.schoolName);
         setSchoolInput(initialData.schoolName);
@@ -270,10 +268,14 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
 
   const handleStep2Submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setHasAttemptedSubmit(true);
     if (loading) return;
     
     if (!firstName.trim() || !lastName.trim()) {
-      setError({ title: "Incomplete Fields", message: "Please fill out your First Name and Last Name." });
+      setError({
+        title: "Required Names Missing",
+        message: "First Name and Last Name are required. Please type your full legal name in ALL UPPERCASE letters before proceeding."
+      });
       return;
     }
 
@@ -553,27 +555,45 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
                 <form onSubmit={handleStep2Submit} className="space-y-3.5">
                   {/* First Name */}
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                      First Name <span className="text-rose-500 font-bold">*</span>
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        First Name <span className="text-rose-500 font-bold">*</span>
+                      </label>
+                      <span className="text-[10px] font-extrabold uppercase text-slate-400">UPPERCASE</span>
+                    </div>
                     <input
                       type="text"
-                      required
                       placeholder="ENTER YOUR FIRST NAME"
                       value={firstName}
                       autoCapitalize="characters"
                       autoCorrect="off"
                       spellCheck={false}
-                      onChange={(e) => setFirstName(e.target.value.toUpperCase())}
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-semibold uppercase tracking-wide transition-all outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-900"
+                      style={{ textTransform: 'uppercase' }}
+                      onChange={(e) => {
+                        setFirstName(e.target.value.toUpperCase());
+                        if (error) setError(null);
+                      }}
+                      className={`w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs sm:text-sm font-semibold uppercase tracking-wide transition-all outline-none text-slate-900 ${
+                        hasAttemptedSubmit && !firstName.trim()
+                          ? 'border-rose-400 focus:border-rose-500 ring-2 ring-rose-500/20 bg-rose-50/20'
+                          : 'border-slate-200 focus:border-[#007C89] focus:ring-2 focus:ring-teal-500/20'
+                      }`}
                     />
+                    {hasAttemptedSubmit && !firstName.trim() && (
+                      <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1 mt-1">
+                        <AlertCircle size={12} className="shrink-0" /> First Name is required. Please enter your first name in uppercase.
+                      </p>
+                    )}
                   </div>
 
                   {/* Middle Name */}
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">
-                      Middle Name <span className="text-slate-400 font-normal lowercase">(optional)</span>
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700">
+                        Middle Name <span className="text-slate-400 font-normal lowercase">(optional)</span>
+                      </label>
+                      <span className="text-[10px] font-extrabold uppercase text-slate-400">UPPERCASE</span>
+                    </div>
                     <input
                       type="text"
                       placeholder="ENTER YOUR MIDDLE NAME"
@@ -581,6 +601,7 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
                       autoCapitalize="characters"
                       autoCorrect="off"
                       spellCheck={false}
+                      style={{ textTransform: 'uppercase' }}
                       onChange={(e) => setMiddleName(e.target.value.toUpperCase())}
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-semibold uppercase tracking-wide transition-all outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-900"
                     />
@@ -588,20 +609,35 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
 
                   {/* Last Name */}
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                      Last Name <span className="text-rose-500 font-bold">*</span>
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        Last Name <span className="text-rose-500 font-bold">*</span>
+                      </label>
+                      <span className="text-[10px] font-extrabold uppercase text-slate-400">UPPERCASE</span>
+                    </div>
                     <input
                       type="text"
-                      required
                       placeholder="ENTER YOUR LAST NAME"
                       value={lastName}
                       autoCapitalize="characters"
                       autoCorrect="off"
                       spellCheck={false}
-                      onChange={(e) => setLastName(e.target.value.toUpperCase())}
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-semibold uppercase tracking-wide transition-all outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-900"
+                      style={{ textTransform: 'uppercase' }}
+                      onChange={(e) => {
+                        setLastName(e.target.value.toUpperCase());
+                        if (error) setError(null);
+                      }}
+                      className={`w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs sm:text-sm font-semibold uppercase tracking-wide transition-all outline-none text-slate-900 ${
+                        hasAttemptedSubmit && !lastName.trim()
+                          ? 'border-rose-400 focus:border-rose-500 ring-2 ring-rose-500/20 bg-rose-50/20'
+                          : 'border-slate-200 focus:border-[#007C89] focus:ring-2 focus:ring-teal-500/20'
+                      }`}
                     />
+                    {hasAttemptedSubmit && !lastName.trim() && (
+                      <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1 mt-1">
+                        <AlertCircle size={12} className="shrink-0" /> Last Name is required. Please enter your last name in uppercase.
+                      </p>
+                    )}
                   </div>
 
                   {/* Candidate Match Alert (if existing records detected) */}
@@ -865,7 +901,13 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
                             placeholder="Confirm your password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-[#007C89] rounded-xl text-xs sm:text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-teal-500/20 pr-10 text-slate-900"
+                            className={`w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs sm:text-sm font-medium transition-all outline-none focus:ring-2 pr-10 text-slate-900 ${
+                              confirmPassword && password
+                                ? confirmPassword === password
+                                  ? "border-emerald-500 focus:border-emerald-600 focus:ring-emerald-500/20"
+                                  : "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20"
+                                : "border-slate-200 focus:border-[#007C89] focus:ring-teal-500/20"
+                            }`}
                           />
                           <button
                             type="button"
@@ -877,12 +919,43 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
                         </div>
                       </div>
 
+                      {/* Confirm Password Real-time Reminder Box */}
+                      {password && (
+                        <div className="text-[11px] font-bold">
+                          {confirmPassword ? (
+                            confirmPassword === password ? (
+                              <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-800 flex items-center gap-2">
+                                <Check size={14} className="text-emerald-600 shrink-0 stroke-[3]" />
+                                <span>Passwords match perfectly.</span>
+                              </div>
+                            ) : (
+                              <div className="p-2.5 bg-rose-50 border border-rose-300 rounded-xl text-rose-800 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 animate-ping" />
+                                <span>Passwords do not match yet. Please make sure both are identical.</span>
+                              </div>
+                            )
+                          ) : (
+                            <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-xl text-amber-800 flex items-center gap-2">
+                              <span className="text-amber-600 font-bold shrink-0">Reminder:</span>
+                              <span>Please re-enter your password in "Confirm Password" to verify.</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Password Requirements List */}
                       <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-1.5">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                          Password Requirements:
-                        </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px]">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                            Password Checklist:
+                          </p>
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                            allRequirementsMet ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
+                          }`}>
+                            {passwordRequirements.filter(r => r.met).length} of {passwordRequirements.length} Met
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px]">
                           {passwordRequirements.map((req, index) => (
                             <div
                               key={index}
