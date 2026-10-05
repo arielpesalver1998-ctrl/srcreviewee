@@ -4,7 +4,7 @@ import App from "./App";
 import "./index.css";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 
-// --- Global Circular-Safe JSON.stringify Patch ---
+// --- Circular-Safe JSON Helper (Local Utility) ---
 const nativeJSONStringify = JSON.stringify;
 
 export function safeJSONStringify(value: any, replacer?: any, space?: any): string {
@@ -36,7 +36,7 @@ export function safeJSONStringify(value: any, replacer?: any, space?: any): stri
   }
 }
 
-JSON.stringify = safeJSONStringify as any;
+// Preserve native JSON.stringify intact for browser runtime and SDKs
 
 // Helper to sanitize any argument to prevent circular references in log bridges
 function sanitizeLogArg(arg: any): any {
@@ -221,10 +221,14 @@ function renderFatalError(error: unknown, title = "Application failed to start")
         <h1 style="margin:0;color:#991b1b;font-size:22px;">${title}</h1>
         <p style="margin-top:12px;color:#475569;line-height:1.6;">The application encountered an unexpected error instead of loading normally.</p>
         <pre style="margin-top:16px;overflow:auto;white-space:pre-wrap;background:#fff1f2;color:#9f1239;border-radius:12px;padding:14px;font-size:12px;">${message}</pre>
-        <button onclick="window.location.reload()" style="margin-top:16px;border:0;border-radius:12px;padding:12px 18px;background:#0f766e;color:white;font-weight:700;cursor:pointer;">Reload Application</button>
+        <button id="fatal-reload-btn" style="margin-top:16px;border:0;border-radius:12px;padding:12px 18px;background:#0f766e;color:white;font-weight:700;cursor:pointer;">Reload Application</button>
       </div>
     </div>
   `;
+
+  root.querySelector("#fatal-reload-btn")?.addEventListener("click", () => {
+    window.location.reload();
+  });
 }
 
 // --- Bootstrap ---
