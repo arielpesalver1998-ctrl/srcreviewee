@@ -153,7 +153,7 @@ export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ currentUser,
         await updateDoc(userRef, updatedData);
       }
 
-      if (auth.currentUser) {
+      if (auth?.currentUser) {
         try {
           await updateProfile(auth.currentUser, { photoURL: photoUrl });
         } catch (authErr) {

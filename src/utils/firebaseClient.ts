@@ -423,7 +423,7 @@ export async function clientUpdateUser(docId: string, data: any, options?: { all
 export async function clientDeleteUser(docId: string, options?: { authUid?: string; targetUser?: any }) {
   await initFirebaseClient();
   const auth = getAuth();
-  const currentUser = auth.currentUser;
+  const currentUser = auth?.currentUser;
   let idToken = "";
   if (currentUser) {
     idToken = await currentUser.getIdToken(true);

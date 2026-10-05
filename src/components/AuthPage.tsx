@@ -81,7 +81,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     const checkStatus = async () => {
       try {
         await currentUser.reload();
-        const updatedUser = auth.currentUser;
+        const updatedUser = auth?.currentUser;
         if (updatedUser?.emailVerified) {
           if (userDoc) {
             clearInterval(intervalId);
@@ -149,6 +149,14 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   useEffect(() => {
     let unsubscribeUserDoc: (() => void) | null = null;
     let cancelled = false;
+
+    if (!auth) {
+      setCheckingDoc(false);
+      setInitialSessionLoading(false);
+      setHasCompletedInitialSessionCheck(true);
+      setLoadingError("Firebase Auth is unavailable. Please check your network or configuration.");
+      return;
+    }
 
     const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
       if (unsubscribeUserDoc) {
@@ -348,7 +356,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
     setCheckingDoc(true);
     try {
       await currentUser.reload();
-      const updatedUser = auth.currentUser;
+      const updatedUser = auth?.currentUser;
       setCurrentUser(updatedUser);
       
       if (updatedUser?.emailVerified) {

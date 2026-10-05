@@ -134,7 +134,7 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
 
   // Check if Firebase Auth user already has password provider linked
   const [hasPasswordLinked, setHasPasswordLinked] = useState<boolean>(() => {
-    return Boolean(auth.currentUser?.providerData?.some((p) => p.providerId === 'password'));
+    return Boolean(auth?.currentUser?.providerData?.some((p) => p.providerId === 'password'));
   });
 
   // Searchable School State
@@ -164,7 +164,7 @@ export function ProfileSetup({ onCompleted, initialData }: ProfileSetupProps) {
   const [checkingMatch, setCheckingMatch] = useState(false);
   const [userMatchChoice, setUserMatchChoice] = useState<'pending' | 'yes' | 'no'>('pending');
 
-  const userEmail = auth.currentUser?.email || initialData?.email || 'reviewee@gmail.com';
+  const userEmail = auth?.currentUser?.email || initialData?.email || 'reviewee@gmail.com';
 
   // Password Requirements Checker (matching Create Account)
   const passwordRequirements = useMemo(() => {

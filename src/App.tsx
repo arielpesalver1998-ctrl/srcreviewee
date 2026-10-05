@@ -291,7 +291,7 @@ export default function App() {
           {/* Main Content Pane */}
           <main className="flex-1 w-full px-4 sm:px-6 py-8 flex flex-col items-center justify-center">
             <div className="w-full flex flex-col items-center justify-center">
-              {view === 'form' && (
+              {(!enrollmentData || view === 'form') && (
                 <div className="w-full max-w-lg animate-fade-in flex justify-center">
                   <AuthPage onSuccess={handleSuccess} />
                 </div>

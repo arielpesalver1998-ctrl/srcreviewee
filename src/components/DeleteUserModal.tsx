@@ -93,7 +93,7 @@ export const DeleteUserModal: React.FC<DeleteUserModalProps> = ({
       // Get Firebase Auth ID token
       const auth = getAuth();
       let idToken = '';
-      if (auth.currentUser) {
+      if (auth?.currentUser) {
         idToken = await auth.currentUser.getIdToken(true);
       }
 
