@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AnimatedSelect } from './ui/animated-select';
 import { cleanOptionalName, formatFormalName, canonicalizeIdNumber } from '../services/userIdentityResolver';
 import { getUserRole, AppRole } from '../utils/roleUtils';
+import { normalizeTierKey, getAllTiers, TierKey } from '../config/tierConfig';
 
 interface EditUserModalProps {
   user: any;
@@ -30,6 +31,8 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
     initialStatus = 'pending';
   }
 
+  const initialTierKey = normalizeTierKey(user.tier || user.userTier || user.subscription || user.membership);
+
   const [formData, setFormData] = useState({
     firstName: user.firstName || user.first_name || '',
     middleName: cleanOptionalName(user.middleName || user.middle_name || ''),
@@ -38,6 +41,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
     role: getUserRole(user),
     seqId: user.seqId || user.seq_id || user.id_number || '',
     status: initialStatus,
+    tier: initialTierKey,
   });
   const [isConfirming, setIsConfirming] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -49,6 +53,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
   const isEditingForbidden = isStaffLoggedIn && targetIsAdmin;
 
   const availableRoles = isStaffLoggedIn ? ['Reviewee'] : ['Admin', 'Staff', 'Reviewee'];
+  const tierOptions = getAllTiers().map((t: any) => ({
+    value: t.key,
+    label: `${t.label} Tier`,
+  }));
 
   const handleSubmit = () => {
     if (isEditingForbidden) {
@@ -91,6 +99,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
         ...formData,
         role: formData.role,
         userRole: formData.role,
+        tier: formData.tier,
+        userTier: formData.tier,
+        subscription: formData.tier,
+        membership: formData.tier,
         seqId: cleanSeqId,
         seq_id: cleanSeqId,
         idNumber: cleanSeqId,
@@ -134,9 +146,9 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
             </div>
         </div>
       ) : (
-        <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-xl">
+        <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-extrabold text-slate-900">Edit User</h2>
+            <h2 className="text-lg font-extrabold text-slate-900">Edit User Profile & Tier</h2>
             <button type="button" onClick={onClose}><X size={20} /></button>
           </div>
           {isEditingForbidden && (
@@ -181,6 +193,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, isOpen, onCl
                 disabled={isEditingForbidden}
               />
             </div>
+
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-1">Account Status</label>
               <AnimatedSelect

@@ -14,6 +14,8 @@ import { useBrowserOnlineStatus } from './hooks/useBrowserOnlineStatus';
 import { getUserRole, isAdmin, isStaff, isReviewee } from './utils/roleUtils';
 import type { RevieweeData } from './types';
 import { requestNotificationPermission } from './utils/fcm';
+import { ScoreUploadProvider } from './context/ScoreUploadContext';
+import { MinimizedScoreUploadWidget } from './components/MinimizedScoreUploadWidget';
 
 export default function App() {
   const isOnline = useBrowserOnlineStatus();
@@ -242,111 +244,116 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen w-full relative selection:bg-blue-100 selection:text-blue-900 font-sans flex flex-col">
-      <FirebaseDiagnosticPanel isOpen={isDiagnosticsOpen} onClose={() => setIsDiagnosticsOpen(false)} />
+    <ScoreUploadProvider>
+      <div className="min-h-screen w-full relative selection:bg-blue-100 selection:text-blue-900 font-sans flex flex-col">
+        <FirebaseDiagnosticPanel isOpen={isDiagnosticsOpen} onClose={() => setIsDiagnosticsOpen(false)} />
 
-      {/* Teal Glow Background (Light & Dark mode aware) */}
-      <div
-        className="absolute inset-0 z-0 dark:hidden"
-        style={{
-          backgroundImage: `
-            radial-gradient(125% 125% at 50% 90%, #ffffff 40%, #14b8a6 100%)
-          `,
-          backgroundSize: "100% 100%",
-        }}
-      />
-      <div
-        className="absolute inset-0 z-0 hidden dark:block"
-        style={{
-          backgroundImage: `
-            radial-gradient(125% 125% at 50% 90%, #020617 40%, #0d9488 100%)
-          `,
-          backgroundSize: "100% 100%",
-        }}
-      />
+        {/* Global Minimized Background Score Upload Widget */}
+        <MinimizedScoreUploadWidget />
 
-      <div className="relative z-10 flex flex-col min-h-screen">
-        <AnimatePresence>
-          {!isOnline && (
-            <motion.div
-              initial={{ opacity: 0, y: -50 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -50 }}
-              className="fixed top-0 left-0 right-0 z-[100002] bg-amber-500 text-white px-4 py-2 flex items-center justify-center gap-3 shadow-lg"
-            >
-              <WifiOff size={16} className="animate-pulse" />
-              <span className="text-xs font-black uppercase tracking-widest">
-                Connection Interrupted. Reconnecting…
-              </span>
-            </motion.div>
+        {/* Teal Glow Background (Light & Dark mode aware) */}
+        <div
+          className="absolute inset-0 z-0 dark:hidden"
+          style={{
+            backgroundImage: `
+              radial-gradient(125% 125% at 50% 90%, #ffffff 40%, #14b8a6 100%)
+            `,
+            backgroundSize: "100% 100%",
+          }}
+        />
+        <div
+          className="absolute inset-0 z-0 hidden dark:block"
+          style={{
+            backgroundImage: `
+              radial-gradient(125% 125% at 50% 90%, #020617 40%, #0d9488 100%)
+            `,
+            backgroundSize: "100% 100%",
+          }}
+        />
+
+        <div className="relative z-10 flex flex-col min-h-screen">
+          <AnimatePresence>
+            {!isOnline && (
+              <motion.div
+                initial={{ opacity: 0, y: -50 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -50 }}
+                className="fixed top-0 left-0 right-0 z-[100002] bg-amber-500 text-white px-4 py-2 flex items-center justify-center gap-3 shadow-lg"
+              >
+                <WifiOff size={16} className="animate-pulse" />
+                <span className="text-xs font-black uppercase tracking-widest">
+                  Connection Interrupted. Reconnecting…
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Main Content Pane */}
+          <main className="flex-1 w-full px-4 sm:px-6 py-8 flex flex-col items-center justify-center">
+            <div className="w-full flex flex-col items-center justify-center">
+              {view === 'form' && (
+                <div className="w-full max-w-lg animate-fade-in flex justify-center">
+                  <AuthPage onSuccess={handleSuccess} />
+                </div>
+              )}
+              
+              {view === 'success' && enrollmentData && (
+                <div className="w-full max-w-lg animate-fade-in">
+                  <SuccessPage data={enrollmentData} onReset={handleReset} onOpenPortal={() => { setView('portal'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+                </div>
+              )}
+
+              {view === 'portal' && enrollmentData && (
+                <div className="fixed inset-0 z-[100] w-full h-full bg-[#F8FAFC] dark:bg-[#020617] overflow-hidden animate-fade-in">
+                  {/* Universal Floating Role Switcher: STRICTLY ACCESSIBLE BY ADMIN ONLY */}
+                  {isAdmin(enrollmentData) && (
+                    <RolePreviewFloatingSwitcher
+                      currentUser={enrollmentData}
+                      currentMode={portalMode}
+                      onSwitchToAdmin={handleSwitchToAdmin}
+                      onSwitchToStaff={handleSwitchToStaff}
+                      onSwitchToReviewee={handleSwitchToReviewee}
+                    />
+                  )}
+
+                  {/* 1. ADMIN DASHBOARD: STRICTLY ACCESSIBLE BY ADMIN ONLY */}
+                  {isAdmin(enrollmentData) && portalMode === 'admin' ? (
+                    <AdminDashboard
+                      currentUser={enrollmentData}
+                      onLogout={handleReset}
+                      onSwitchToReviewee={handleSwitchToReviewee}
+                      onSwitchToStaff={handleSwitchToStaff}
+                    />
+                  ) : (isAdmin(enrollmentData) || isStaff(enrollmentData)) && portalMode === 'staff' ? (
+                    /* 2. STAFF DASHBOARD: ACCESSIBLE BY STAFF (AND ADMIN PREVIEW) */
+                    <StaffDashboard
+                      currentUser={enrollmentData}
+                      onLogout={handleReset}
+                      onSwitchToAdmin={isAdmin(enrollmentData) ? handleSwitchToAdmin : undefined}
+                    />
+                  ) : (
+                    /* 3. REVIEWEE DASHBOARD: FOR REVIEWEE STUDENTS (AND ADMIN PREVIEW) */
+                    <RevieweePortal
+                      data={enrollmentData}
+                      onLogout={handleReset}
+                      onSwitchToAdmin={isAdmin(enrollmentData) ? handleSwitchToAdmin : undefined}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          </main>
+
+          {/* Footer copyright */}
+          {view !== 'portal' && (
+            <footer className="py-6 border-t border-slate-100 text-center text-slate-400 text-[11px] font-medium bg-white/40 space-y-1">
+              <p>Developed by Ariel O. Pesalver, RCrim, MSCJ</p>
+              <p>© {new Date().getFullYear()} SRC Registration Form. All rights reserved.</p>
+            </footer>
           )}
-        </AnimatePresence>
-
-        {/* Main Content Pane */}
-        <main className="flex-1 w-full px-4 sm:px-6 py-8 flex flex-col items-center justify-center">
-          <div className="w-full flex flex-col items-center justify-center">
-            {view === 'form' && (
-              <div className="w-full max-w-lg animate-fade-in flex justify-center">
-                <AuthPage onSuccess={handleSuccess} />
-              </div>
-            )}
-            
-            {view === 'success' && enrollmentData && (
-              <div className="w-full max-w-lg animate-fade-in">
-                <SuccessPage data={enrollmentData} onReset={handleReset} onOpenPortal={() => { setView('portal'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
-              </div>
-            )}
-
-            {view === 'portal' && enrollmentData && (
-              <div className="fixed inset-0 z-[100] w-full h-full bg-[#F8FAFC] dark:bg-[#020617] overflow-hidden animate-fade-in">
-                {/* Universal Floating Role Switcher: STRICTLY ACCESSIBLE BY ADMIN ONLY */}
-                {isAdmin(enrollmentData) && (
-                  <RolePreviewFloatingSwitcher
-                    currentUser={enrollmentData}
-                    currentMode={portalMode}
-                    onSwitchToAdmin={handleSwitchToAdmin}
-                    onSwitchToStaff={handleSwitchToStaff}
-                    onSwitchToReviewee={handleSwitchToReviewee}
-                  />
-                )}
-
-                {/* 1. ADMIN DASHBOARD: STRICTLY ACCESSIBLE BY ADMIN ONLY */}
-                {isAdmin(enrollmentData) && portalMode === 'admin' ? (
-                  <AdminDashboard
-                    currentUser={enrollmentData}
-                    onLogout={handleReset}
-                    onSwitchToReviewee={handleSwitchToReviewee}
-                    onSwitchToStaff={handleSwitchToStaff}
-                  />
-                ) : (isAdmin(enrollmentData) || isStaff(enrollmentData)) && portalMode === 'staff' ? (
-                  /* 2. STAFF DASHBOARD: ACCESSIBLE BY STAFF (AND ADMIN PREVIEW) */
-                  <StaffDashboard
-                    currentUser={enrollmentData}
-                    onLogout={handleReset}
-                    onSwitchToAdmin={isAdmin(enrollmentData) ? handleSwitchToAdmin : undefined}
-                  />
-                ) : (
-                  /* 3. REVIEWEE DASHBOARD: FOR REVIEWEE STUDENTS (AND ADMIN PREVIEW) */
-                  <RevieweePortal
-                    data={enrollmentData}
-                    onLogout={handleReset}
-                    onSwitchToAdmin={isAdmin(enrollmentData) ? handleSwitchToAdmin : undefined}
-                  />
-                )}
-              </div>
-            )}
-          </div>
-        </main>
-
-        {/* Footer copyright */}
-        {view !== 'portal' && (
-          <footer className="py-6 border-t border-slate-100 text-center text-slate-400 text-[11px] font-medium bg-white/40 space-y-1">
-            <p>Developed by Ariel O. Pesalver, RCrim, MSCJ</p>
-            <p>© {new Date().getFullYear()} SRC Registration Form. All rights reserved.</p>
-          </footer>
-        )}
+        </div>
       </div>
-    </div>
+    </ScoreUploadProvider>
   );
 }
 

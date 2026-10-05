@@ -32,6 +32,9 @@ import {
   AlertCircle,
   Building2,
   Activity,
+  Plus,
+  Upload,
+  ShieldAlert,
 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { firestoreDb } from '../utils/firebaseClient';
@@ -41,9 +44,13 @@ import { getUserRole, isAdmin, isAdminLike } from '../utils/roleUtils';
 import { UserAvatar } from './UserAvatar';
 import { AdminFolderSyncViewer } from './AdminFolderSyncViewer';
 import RevieweeScoresDashboard from './reviewee/RevieweeScoresDashboard';
+import { RevieweeScoresTable } from './scores/RevieweeScoresTable';
 import { AllUsersDirectory } from './AllUsersDirectory';
 import { EditUserModal } from './EditUserModal';
 import { DeleteUserModal } from './DeleteUserModal';
+import { AddScoreModal } from './AddScoreModal';
+import { BulkScoreUploadModal } from './BulkScoreUploadModal';
+import { AnimatedSelect, AnimatedSelectOption } from './ui/animated-select';
 import { GradeCalculationSettings } from './GradeCalculationSettings';
 import { ScannerPage } from './ScannerPage';
 import { VenueQRPage } from './VenueQRPage';
@@ -52,8 +59,11 @@ import { PortalLayout } from './PortalLayout';
 import { ProfileDashboard } from './ProfileDashboard';
 import { downloadRegisteredUsersCsv } from '../utils/exportUsersCsv';
 import { deduplicateUsersByIdNumber, getUserAccountStatus } from '../services/userIdentityResolver';
+import { isValidActiveRevieweeWithId } from '../utils/scoreFieldResolver';
+import { SyncStatusIndicator } from './SyncStatusIndicator';
 import { DuplicateResolver } from './DuplicateResolver';
 import { ActivityLogTab } from './ActivityLogTab';
+import { AutomatedAuditReport } from './AutomatedAuditReport';
 import { logProfileModification } from '../services/activityLogService';
 
 interface AdminDashboardProps {
@@ -69,6 +79,8 @@ export type AdminTab =
   | 'users' 
   | 'reviewees' 
   | 'scores' 
+  | 'audit-report'
+  | 'reconciliation-report'
   | 'archives' 
   | 'folders' 
   | 'leaderboard' 
@@ -104,6 +116,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Modals for user management
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [deletingUser, setDeletingUser] = useState<any | null>(null);
+  const [isAddScoreModalOpen, setIsAddScoreModalOpen] = useState(false);
+  const [isBulkScoreModalOpen, setIsBulkScoreModalOpen] = useState(false);
+  const [scoreModalUser, setScoreModalUser] = useState<any | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [isExportingCsv, setIsExportingCsv] = useState(false);
   const [scoreContextMode, setScoreContextMode] = useState<'single' | 'combined'>('single');
@@ -197,6 +212,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (tab === 'folders') path = '/admin/folders';
     else if (tab === 'scores') path = '/admin/scores';
     else if (tab === 'users') path = '/admin/users';
+    else if (tab === 'audit-report' || tab === 'reconciliation-report') path = '/admin/audit';
     else if (tab === 'grades') path = '/admin/grades';
     else if (tab === 'qr-scanner') path = '/admin/scanner';
     else if (tab === 'qr-venue') path = '/admin/venue-qr';
@@ -214,7 +230,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const r = getUserRole(u).toLowerCase();
       return r !== 'admin' && r !== 'staff';
     });
-    const activeReviewees = reviewees.filter(u => getUserAccountStatus(u) === 'active');
+    const activeReviewees = validUsers.filter(u => isValidActiveRevieweeWithId(u));
     const staff = validUsers.filter(u => getUserRole(u).toLowerCase() === 'staff');
     const admins = validUsers.filter(u => getUserRole(u).toLowerCase() === 'admin');
 
@@ -331,8 +347,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     { key: 'overview', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
     { key: 'profile', label: 'My Profile', icon: <User size={18} /> },
     { key: 'users', label: 'All Users', icon: <Users size={18} />, badge: metrics.totalUsers },
-    { key: 'reviewees', label: 'Reviewees', icon: <UserCheck size={18} />, badge: metrics.totalReviewees },
+    { key: 'reviewees', label: 'Reviewees', icon: <UserCheck size={18} />, badge: metrics.activeReviewees },
     { key: 'scores', label: 'Score Management', icon: <ClipboardList size={18} /> },
+    { key: 'audit-report', label: 'Audit & Parity Report', icon: <ShieldAlert size={18} /> },
     { key: 'archives', label: 'Archives', icon: <FolderArchive size={18} /> },
     { key: 'leaderboard', label: 'Leaderboard', icon: <Trophy size={18} /> },
     { key: 'school-mappings', label: 'School Management', icon: <GraduationCap size={18} /> },
@@ -365,6 +382,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         db={firestoreDb}
         navItems={drawerNavItems}
         footerItems={bottomNavItems}
+        headerRightExtra={
+          <SyncStatusIndicator
+            allUsers={allUsers}
+            folders={folders}
+            sidebarRevieweeCount={metrics.activeReviewees}
+            onNavigateTab={(tab) => handleTabChange(tab as AdminTab)}
+            variant="header-badge"
+          />
+        }
       >
         <div className="mx-auto max-w-7xl">
           {actionNotice && (
@@ -378,14 +404,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {activeTab === 'overview' && (
             <div className="space-y-4 sm:space-y-6">
               {/* Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Admin Dashboard</h1>
                   <p className="text-xs sm:text-sm font-medium text-slate-500 mt-0.5">
                     Monitor reviewee performance, account activity, and score publication.
                   </p>
                 </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsBulkScoreModalOpen(true)}
+                    className="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-blue-600/20 flex items-center gap-1.5 cursor-pointer shrink-0"
+                    title="Upload examination scores in bulk via CSV spreadsheet"
+                  >
+                    <Upload size={14} className="stroke-[2.5]" />
+                    <span>Upload CSV</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScoreModalUser(null);
+                      setIsAddScoreModalOpen(true);
+                    }}
+                    className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-teal-600/20 flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    <Plus size={15} className="stroke-[2.5]" />
+                    <span>Add Score</span>
+                  </button>
+                </div>
               </div>
+
+              {/* Real-Time Database Sync Telemetry Status Banner */}
+              <SyncStatusIndicator
+                allUsers={allUsers}
+                folders={folders}
+                sidebarRevieweeCount={metrics.activeReviewees}
+                onNavigateTab={(tab) => handleTabChange(tab as AdminTab)}
+                variant="dashboard-card"
+              />
 
               {/* DASHBOARD SCORE CONTEXT */}
               <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-sm">
@@ -423,33 +480,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 <div className="mt-4">
-                  <select
+                  <AnimatedSelect
                     value={selectedFolderId}
-                    onChange={(e) => setSelectedFolderId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-                  >
-                    <option value="all">All Folders (Pooled Analytics)</option>
-                    {folders.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name} ({f.folderType || f.type || 'Standard'})
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      {
+                        value: 'all',
+                        label: 'All Folders (Pooled Analytics)',
+                        description: 'Aggregate score records across all folders',
+                        badge: 'All',
+                        icon: <FolderSync size={14} className="text-teal-600" />,
+                      },
+                      ...folders.map((f) => ({
+                        value: f.id,
+                        label: f.name,
+                        description: `Type: ${f.folderType || f.type || 'Standard'} • ${f.publicationStatus === 'published' ? 'Published' : 'Draft'}`,
+                        badge: f.folderType || f.type || 'Folder',
+                        icon: <FolderArchive size={14} className="text-slate-500" />,
+                      })),
+                    ]}
+                    onChange={setSelectedFolderId}
+                    placeholder="Select Score Folder..."
+                    searchPlaceholder="Search score folders..."
+                    label="Active Score Analytics Folder"
+                    variant="compact-popover"
+                    triggerClassName="h-11 bg-slate-50 border-slate-200 text-slate-900 hover:border-slate-300 shadow-2xs"
+                    triggerTextClassName="text-slate-900 font-bold text-xs"
+                  />
                 </div>
               </div>
 
               {/* KPI Metric Cards */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 lg:gap-6">
                 <StatCard
                   label="Active Reviewees"
-                  value={String(metrics.activeReviewees)}
+                  value={loadingUsers ? '...' : String(metrics.activeReviewees)}
                   icon={<GraduationCap size={18} />}
                   tone="teal"
-                  subtitle={`Out of ${metrics.totalUsers} registered`}
+                  subtitle={`Out of ${metrics.totalReviewees} enrolled reviewees`}
                 />
                 <StatCard
                   label="Active Staff"
-                  value={String(metrics.totalStaff || 2)}
+                  value={loadingUsers ? '...' : String(metrics.totalStaff || 2)}
                   icon={<Shield size={18} />}
                   tone="blue"
                   subtitle="Staff coordinators"
@@ -463,7 +534,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
                 <StatCard
                   label="Pending Actions"
-                  value="15"
+                  value={loadingUsers ? '...' : String(metrics.totalReviewees - metrics.activeReviewees > 0 ? metrics.totalReviewees - metrics.activeReviewees : 0)}
                   icon={<AlertCircle size={18} />}
                   tone="amber"
                   subtitle="Accounts requiring review"
@@ -471,7 +542,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
             {/* Quick Management Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 lg:gap-6">
               <div
                 onClick={() => handleTabChange('folders')}
                 className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 hover:border-teal-400 transition-all shadow-sm cursor-pointer group hover:shadow-md flex flex-col justify-between"
@@ -510,6 +581,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
                 <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] sm:text-xs font-black text-purple-600 uppercase tracking-wider">
                   <span>Open User Directory</span>
+                  <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                </div>
+              </div>
+
+              <div
+                onClick={() => handleTabChange('audit-report')}
+                className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 hover:border-amber-400 transition-all shadow-sm cursor-pointer group hover:shadow-md flex flex-col justify-between"
+              >
+                <div>
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mb-2 sm:mb-3 group-hover:scale-105 transition-transform">
+                    <ShieldAlert size={18} />
+                  </div>
+                  <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm group-hover:text-amber-600 transition-colors flex items-center gap-1.5">
+                    <span>Audit & Parity Report</span>
+                    <span className="text-[10px] bg-amber-100 text-amber-800 font-black px-1.5 py-0.2 rounded-md">Automated</span>
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-1 leading-relaxed line-clamp-2 sm:line-clamp-none">
+                    Compare registered Reviewees vs. Score Management entries, identify missing or orphaned IDs, and run 1-click auto-heal.
+                  </p>
+                </div>
+                <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] sm:text-xs font-black text-amber-600 uppercase tracking-wider">
+                  <span>View Audit Report</span>
                   <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>
@@ -671,16 +764,72 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* FOLDERS TAB */}
         {activeTab === 'folders' && (
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
+          <div className="bg-slate-50 border border-slate-200/80 rounded-3xl overflow-hidden shadow-sm">
             <AdminFolderSyncViewer currentUser={currentUser} />
           </div>
         )}
 
         {/* SCORES TAB */}
         {activeTab === 'scores' && (
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <RevieweeScoresDashboard currentUser={currentUser} />
+          <div className="space-y-4">
+            <div className="bg-white border border-slate-200/80 rounded-3xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+                  <ClipboardList className="text-teal-600" size={20} />
+                  Score Management & Matrix
+                </h2>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Encode, view, and synchronize reviewee examination scores across folders and board subject areas.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkScoreModalOpen(true)}
+                  className="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-blue-600/20 flex items-center gap-1.5 cursor-pointer"
+                  title="Upload examination scores in bulk via CSV spreadsheet"
+                >
+                  <Upload size={14} className="stroke-[2.5]" />
+                  <span>Upload Scores CSV</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScoreModalUser(null);
+                    setIsAddScoreModalOpen(true);
+                  }}
+                  className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-teal-600/20 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus size={15} className="stroke-[2.5]" />
+                  <span>Add Score</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Master Reviewee Scores Table */}
+            <div className="bg-white border border-slate-200/80 rounded-3xl p-4 sm:p-6 shadow-sm">
+              <RevieweeScoresTable
+                role="admin"
+                users={allUsers}
+                currentUser={currentUser}
+                isLoading={loadingUsers}
+                onAddScore={(user) => {
+                  setScoreModalUser(user);
+                  setIsAddScoreModalOpen(true);
+                }}
+                onEditUser={(user) => setEditingUser(user)}
+                onViewProfile={(user) => handleTabChange('users')}
+              />
+            </div>
           </div>
+        )}
+
+        {/* AUDIT & PARITY REPORT TAB */}
+        {(activeTab === 'audit-report' || activeTab === 'reconciliation-report') && (
+          <AutomatedAuditReport
+            allUsers={allUsers}
+            onNavigateTab={(tab) => handleTabChange(tab as AdminTab)}
+          />
         )}
 
         {/* PROFILE TAB */}
@@ -695,6 +844,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             loading={loadingUsers}
             onEditUser={(user) => setEditingUser(user)}
             onDeleteUser={(user) => setDeletingUser(user)}
+            onAddScore={(user) => {
+              setScoreModalUser(user);
+              setIsAddScoreModalOpen(true);
+            }}
             currentUser={currentUser}
             onDownloadCsv={handleDownloadUsersCsv}
             isExportingCsv={isExportingCsv}
@@ -708,6 +861,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             loading={loadingUsers}
             onEditUser={(user) => setEditingUser(user)}
             onDeleteUser={(user) => setDeletingUser(user)}
+            onAddScore={(user) => {
+              setScoreModalUser(user);
+              setIsAddScoreModalOpen(true);
+            }}
             currentUser={currentUser}
             onDownloadCsv={handleDownloadUsersCsv}
             isExportingCsv={isExportingCsv}
@@ -717,7 +874,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* ARCHIVES TAB */}
         {activeTab === 'archives' && (
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-4 sm:p-6 shadow-sm">
+          <div className="bg-slate-50 border border-slate-200/80 rounded-3xl overflow-hidden shadow-sm">
             <AdminFolderSyncViewer currentUser={currentUser} />
           </div>
         )}
@@ -966,6 +1123,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           onSuccess={(uid, docId, name) => {
             setActionNotice(`User account ${name} deleted.`);
             setDeletingUser(null);
+            setTimeout(() => setActionNotice(null), 4000);
+          }}
+        />
+      )}
+
+      {/* Add / Encode Score Modal */}
+      <AddScoreModal
+        isOpen={isAddScoreModalOpen}
+        onClose={() => {
+          setIsAddScoreModalOpen(false);
+          setScoreModalUser(null);
+        }}
+        allUsers={allUsers}
+        currentUser={currentUser}
+        preselectedUser={scoreModalUser}
+        preselectedFolderId={selectedFolderId !== 'all' ? selectedFolderId : null}
+        onScoreAdded={({ revieweeName, score, total }) => {
+          setActionNotice(`Score of ${score}/${total} recorded for ${revieweeName}.`);
+          setTimeout(() => setActionNotice(null), 4000);
+        }}
+      />
+
+      {/* Bulk CSV Score Upload Modal */}
+      {isBulkScoreModalOpen && (
+        <BulkScoreUploadModal
+          isOpen={isBulkScoreModalOpen}
+          onClose={() => setIsBulkScoreModalOpen(false)}
+          allUsers={allUsers}
+          currentUser={currentUser}
+          preselectedFolderId={selectedFolderId !== 'all' ? selectedFolderId : null}
+          onUploadComplete={(res) => {
+            setActionNotice(`Bulk uploaded ${res.successCount} score(s) successfully!`);
             setTimeout(() => setActionNotice(null), 4000);
           }}
         />

@@ -8,6 +8,7 @@ interface BoardMajorAreaCardProps {
   watermark: string;
   isSelected?: boolean;
   onClick?: () => void;
+  onDoubleClick?: () => void;
 }
 
 export function BoardMajorAreaCard({
@@ -17,7 +18,8 @@ export function BoardMajorAreaCard({
   color,
   watermark,
   isSelected = false,
-  onClick
+  onClick,
+  onDoubleClick
 }: BoardMajorAreaCardProps) {
   const [animatedPercentage, setAnimatedPercentage] = useState(0);
 
@@ -37,6 +39,7 @@ export function BoardMajorAreaCard({
   return (
     <div
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       className={`relative w-full rounded-[20px] bg-white p-5 border text-center cursor-pointer select-none overflow-hidden transition-all duration-200 hover:-translate-y-1 ${
         isSelected
           ? 'shadow-md border-[2px]'

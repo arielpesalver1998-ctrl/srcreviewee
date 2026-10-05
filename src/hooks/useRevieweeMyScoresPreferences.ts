@@ -133,7 +133,11 @@ export function useRevieweeMyScoresPreferences(
 
         setPreference(finalPref);
         if (localStorageKey) {
-          localStorage.setItem(localStorageKey, JSON.stringify(finalPref));
+          try {
+            localStorage.setItem(localStorageKey, JSON.stringify(finalPref));
+          } catch (e) {
+            console.warn("Error caching preference to localStorage:", e);
+          }
         }
       } catch (e) {
         console.error("Error in loadPrefs:", e);

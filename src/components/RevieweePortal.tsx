@@ -24,13 +24,13 @@ import { PortalLayout } from './PortalLayout';
 import { AreaProgressCard, ScoreTrend, getScoreColor, getScoreLabel } from './DashboardShared';
 import { StatCard, ActivityFeed, SimpleTable, SectionHeader, QuickActionsGrid } from './DashboardKit';
 import { ProfileDashboard } from './ProfileDashboard';
-import { AdminFolderSyncViewer } from './AdminFolderSyncViewer';
 import { doc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { DEFAULT_GRADE_WEIGHTS, GradeWeights, SubjectArea, GRADE_CATEGORY_LABELS, GradeCategoryKey } from '../utils/gradeCalculation';
 import { calculateRevieweeArea } from '../utils/calculateRevieweeArea';
 import { AreaPerformanceCircle } from './AreaPerformanceCircle';
 import { BoardSubjectAreasSection } from './BoardSubjectAreasSection';
 import { AreaPerformanceModal } from './performance/AreaPerformanceModal';
+import { AverageScoreProgressBar } from './reviewee/AverageScoreProgressBar';
 import { getResolvedScore } from '../utils/scoreFieldResolver';
 import { isValidRevieweeRecord } from '../services/userIdentityResolver';
 import { UserAvatar } from './UserAvatar';
@@ -83,7 +83,6 @@ export function RevieweePortal({
     }
     return localStorage.getItem('reviewee_active_tab') || 'dashboard';
   });
-  const [showAdminFolderModal, setShowAdminFolderModal] = useState(false);
   const { notifications } = useNotifications(firestoreDb, data.uid || "");
   
   const unreadCount = useMemo(() => notifications.filter(n => !n.isRead).length, [notifications]);
@@ -156,11 +155,25 @@ export function RevieweePortal({
   
   const avgScore = useMemo(() => {
     const subjects: SubjectArea[] = ["clj", "lea", "cdi", "fs", "crim", "ca"];
-    const areaScores = subjects.map(subj => {
-      return calculateRevieweeArea(revieweeData, subj, gradeWeights).percentage;
+    const areaResults = subjects.map(subj => {
+      return calculateRevieweeArea(revieweeData, subj, gradeWeights);
     });
-    return Number((areaScores.reduce((sum, val) => sum + val, 0) / subjects.length).toFixed(1));
-  }, [revieweeData, gradeWeights]);
+    
+    // Check if any area has evaluated scores from calculateRevieweeArea
+    const areasWithScores = areaResults.filter(r => r.totalPossible > 0 || r.percentage > 0);
+    if (areasWithScores.length > 0) {
+      const areaAverage = areaResults.reduce((sum, val) => sum + val.percentage, 0) / subjects.length;
+      return Number(areaAverage.toFixed(2));
+    }
+
+    // Fallback to direct scores from score records if present
+    if (scores.length > 0) {
+      const directAvg = scores.reduce((sum, s) => sum + (s.percentage || 0), 0) / scores.length;
+      return Number(directAvg.toFixed(2));
+    }
+
+    return 0;
+  }, [revieweeData, gradeWeights, scores]);
   
   // Calculate dynamic rank for this specific reviewee
   const rankInfo = useMemo(() => {
@@ -233,34 +246,21 @@ export function RevieweePortal({
 
   const renderDashboard = () => (
     <div className="space-y-4 sm:space-y-6">
-      {/* Admin Folder Sync Banner */}
-      {isAdminLike(revieweeData) && (
-        <div className="bg-gradient-to-r from-slate-900 to-teal-950 text-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 border border-teal-500/30 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center text-teal-300 shrink-0">
-              <FolderSync size={20} />
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
-                Admin Score Folders & Sync Hub
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-teal-500/20 text-teal-300 border border-teal-400/30">
-                  Admin Tools
-                </span>
-              </h3>
-              <p className="text-[11px] sm:text-xs text-slate-300 font-medium mt-0.5 line-clamp-1 sm:line-clamp-none">
-                Verify folders created in Firebase Firestore, audit dual-collection sync, and manage portal publication status.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowAdminFolderModal(true)}
-            className="px-3.5 py-2 sm:px-4 sm:py-2.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-md shrink-0 flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <span>Verify Folders</span>
-            <ArrowRight size={14} />
-          </button>
-        </div>
-      )}
+      {/* Visual Average Score Progress Bar */}
+      <AverageScoreProgressBar
+        averageScore={avgScore}
+        totalEvaluations={scores.length}
+        areaScores={areaScores.map((item) => ({
+          key: item.key,
+          area: item.area,
+          title: item.title,
+          percent: item.percent,
+          count: item.count,
+          onClick: () => handleAreaCardClick(item.area, item.key as SubjectArea),
+        }))}
+        onAreaClick={(areaLabel, areaKey) => handleAreaCardClick(areaLabel, areaKey)}
+        passingBenchmark={75}
+      />
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
@@ -364,10 +364,27 @@ export function RevieweePortal({
   const renderProgress = () => (
     <div className="space-y-4 sm:space-y-6">
       <SectionHeader title="Progress Analytics" />
+
+      {/* Visual Average Score Progress Bar */}
+      <AverageScoreProgressBar
+        averageScore={avgScore}
+        totalEvaluations={scores.length}
+        areaScores={areaScores.map((item) => ({
+          key: item.key,
+          area: item.area,
+          title: item.title,
+          percent: item.percent,
+          count: item.count,
+          onClick: () => handleAreaCardClick(item.area, item.key as SubjectArea),
+        }))}
+        onAreaClick={(areaLabel, areaKey) => handleAreaCardClick(areaLabel, areaKey)}
+        passingBenchmark={75}
+      />
+
       <div className="grid grid-cols-1 gap-2.5 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           label="Overall Average"
-          value={scores.length > 0 ? `${avgScore}%` : '0.00%'}
+          value={scores.length > 0 ? `${Number(avgScore).toFixed(2)}%` : '0.00%'}
           icon={<Star size={18} />}
           tone="blue"
           subtitle={scores.length > 0 ? getScoreLabel(avgScore) : 'No scores yet'}
@@ -477,18 +494,6 @@ export function RevieweePortal({
         db={firestoreDb}
         navItems={drawerNavItems}
         footerItems={bottomNavItems}
-        headerRightExtra={
-          isAdmin(revieweeData) ? (
-            <button
-              onClick={() => setShowAdminFolderModal(true)}
-              className="flex h-8 sm:h-9 items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors border border-teal-200/80 font-bold text-[11px] sm:text-xs shadow-sm cursor-pointer"
-              title="Admin Folder Synchronization"
-            >
-              <FolderSync size={14} className="text-teal-600" />
-              <span className="hidden sm:inline">Folder Sync</span>
-            </button>
-          ) : undefined
-        }
       >
         <div className="mx-auto max-w-5xl">
           {(activeTab === "dashboard" || activeTab === "daily") && renderDashboard()}
@@ -501,7 +506,7 @@ export function RevieweePortal({
           )}
           {activeTab === "progress" && renderProgress()}
           {activeTab === "results" && renderResults()}
-          {activeTab === "profile" && <ProfileDashboard currentUser={revieweeData} onUpdate={setRevieweeData} />}
+          {activeTab === "profile" && <ProfileDashboard currentUser={revieweeData} onUpdate={setRevieweeData} isRevieweePortalContext={true} />}
         </div>
       </PortalLayout>
 
@@ -517,18 +522,6 @@ export function RevieweePortal({
           totalEarned={selectedSubjectBreakdown.totalEarned}
           totalPossible={selectedSubjectBreakdown.totalPossible}
         />
-      )}
-
-      {showAdminFolderModal && isAdmin(revieweeData) && (
-        <div className="fixed inset-0 z-[100000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-5xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[92vh] flex flex-col animate-in zoom-in-95">
-            <AdminFolderSyncViewer
-              currentUser={revieweeData}
-              isModal={true}
-              onClose={() => setShowAdminFolderModal(false)}
-            />
-          </div>
-        </div>
       )}
     </div>
   );

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Mail, Building2, MapPin, Key, Shield, Calendar, Camera, Loader2, Save, CheckCircle2, Lock, FolderSync } from 'lucide-react';
+import { User, Mail, Building2, MapPin, Key, Shield, Calendar, Camera, Loader2, Save, CheckCircle2, Lock, FolderSync, Award } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { sendPasswordResetEmail, updateProfile } from 'firebase/auth';
 import { getClientDb } from '../utils/firebaseClient';
@@ -12,13 +12,17 @@ import { UserAvatar } from './UserAvatar';
 import { AdminFolderSyncViewer } from './AdminFolderSyncViewer';
 import { GmailIcon } from './GmailIcon';
 import { openGmailApp } from '../utils/emailAppLauncher';
+import { TierBadge } from './TierBadge';
+import { TierCardList } from './TierCard';
+import { getTierInfo, normalizeTierKey } from '../config/tierConfig';
 
 interface ProfileDashboardProps {
   currentUser: any;
   onUpdate?: (updatedUser: any) => void;
+  isRevieweePortalContext?: boolean;
 }
 
-export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ currentUser, onUpdate }) => {
+export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ currentUser, onUpdate, isRevieweePortalContext }) => {
   const [firstName, setFirstName] = useState(currentUser?.first_name || currentUser?.firstName || '');
   const [middleName, setMiddleName] = useState(currentUser?.middle_name || currentUser?.middleName || '');
   const [lastName, setLastName] = useState(currentUser?.last_name || currentUser?.lastName || '');
@@ -196,9 +200,12 @@ export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ currentUser,
 
         {/* User Info Header */}
         <div className="flex-1 text-center sm:text-left space-y-1.5 sm:space-y-2 min-w-0">
-          <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-teal-500/20 border border-teal-400/30 text-teal-200 text-[11px] sm:text-xs font-bold">
-            <Shield size={13} />
-            <span>{role} Portal</span>
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+            <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-teal-500/20 border border-teal-400/30 text-teal-200 text-[11px] sm:text-xs font-bold">
+              <Shield size={13} />
+              <span>{role} Portal</span>
+            </div>
+            <TierBadge tier={currentUser?.tier || currentUser?.userTier || currentUser?.subscription || currentUser?.membership} size="sm" showLabel showSubtitle={false} />
           </div>
           <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight truncate">
             {firstName} {middleName ? middleName + ' ' : ''}{lastName}
@@ -368,7 +375,7 @@ export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ currentUser,
         </div>
 
         {/* Admin Tools: Score Folders & Sync - STRICTLY ADMIN ONLY */}
-        {(isAdmin(currentUser) || isSuperAdminEmail(currentUser?.email)) && (
+        {!isRevieweePortalContext && (isAdmin(currentUser) || isSuperAdminEmail(currentUser?.email)) && (
           <div className="border-t border-slate-100 pt-6 mt-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-teal-50/70 border border-teal-200/80 p-5 rounded-2xl">
               <div>
@@ -392,7 +399,7 @@ export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ currentUser,
         )}
       </form>
 
-      {showFolderSyncModal && (isAdmin(currentUser) || isSuperAdminEmail(currentUser?.email)) && (
+      {!isRevieweePortalContext && showFolderSyncModal && (isAdmin(currentUser) || isSuperAdminEmail(currentUser?.email)) && (
         <div className="fixed inset-0 z-[100000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-5xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[92vh] flex flex-col animate-in zoom-in-95">
             <AdminFolderSyncViewer

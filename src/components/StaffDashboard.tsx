@@ -16,7 +16,9 @@ import {
   CheckCircle2,
   AlertCircle,
   User,
-  Building2
+  Building2,
+  Plus,
+  Upload,
 } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { firestoreDb } from '../utils/firebaseClient';
@@ -25,14 +27,19 @@ import { useScoreFolders } from '../hooks/useScoreFolders';
 import { getUserRole, isStaff } from '../utils/roleUtils';
 import { UserAvatar } from './UserAvatar';
 import RevieweeScoresDashboard from './reviewee/RevieweeScoresDashboard';
+import { RevieweeScoresTable } from './scores/RevieweeScoresTable';
 import { AllUsersDirectory } from './AllUsersDirectory';
 import { EditUserModal } from './EditUserModal';
+import { AddScoreModal } from './AddScoreModal';
+import { BulkScoreUploadModal } from './BulkScoreUploadModal';
 import { ScannerPage } from './ScannerPage';
 import { VenueQRPage } from './VenueQRPage';
 import { StatCard } from './DashboardKit';
 import { PortalLayout } from './PortalLayout';
 import { ProfileDashboard } from './ProfileDashboard';
 import { deduplicateUsersByIdNumber, getUserAccountStatus } from '../services/userIdentityResolver';
+import { isValidActiveRevieweeWithId } from '../utils/scoreFieldResolver';
+import { SyncStatusIndicator } from './SyncStatusIndicator';
 import { logProfileModification } from '../services/activityLogService';
 
 interface StaffDashboardProps {
@@ -62,6 +69,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
   const { folders, loading: loadingFolders } = useScoreFolders();
 
   const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [isAddScoreModalOpen, setIsAddScoreModalOpen] = useState(false);
+  const [isBulkScoreModalOpen, setIsBulkScoreModalOpen] = useState(false);
+  const [scoreModalUser, setScoreModalUser] = useState<any | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   const handleTabChange = (tab: StaffTab) => {
@@ -86,11 +96,11 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
       const r = getUserRole(u).toLowerCase();
       return r !== 'admin' && r !== 'staff';
     });
-    const activeReviewees = reviewees.filter(u => getUserAccountStatus(u) === 'active');
+    const activeReviewees = validUsers.filter(u => isValidActiveRevieweeWithId(u));
     const publishedFolders = folders.filter(f => !f.isArchived && f.publicationStatus !== 'hidden');
 
     let totalScoresCount = 0;
-    reviewees.forEach((u) => {
+    validUsers.forEach((u) => {
       const keys = Object.keys(u);
       keys.forEach((k) => {
         if (k.startsWith('score_') || k.startsWith('diag_') || k.startsWith('scoresByDate_')) {
@@ -190,7 +200,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
   const drawerNavItems = [
     { key: 'overview', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
     { key: 'profile', label: 'My Profile', icon: <User size={18} /> },
-    { key: 'directory', label: 'Reviewee Directory', icon: <Users size={18} />, badge: metrics.totalReviewees },
+    { key: 'directory', label: 'Reviewee Directory', icon: <Users size={18} />, badge: metrics.activeReviewees },
     { key: 'scores', label: 'Score Matrix & Encoding', icon: <ClipboardList size={18} /> },
     { key: 'scanner', label: 'Attendance Scanner', icon: <ScanLine size={18} /> },
     { key: 'venue-qr', label: 'Venue QR Poster', icon: <QrCode size={18} /> },
@@ -220,6 +230,15 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
         db={firestoreDb}
         navItems={drawerNavItems}
         footerItems={bottomNavItems}
+        headerRightExtra={
+          <SyncStatusIndicator
+            allUsers={allUsers}
+            folders={folders}
+            sidebarRevieweeCount={metrics.activeReviewees}
+            onNavigateTab={(tab) => handleTabChange(tab as StaffTab)}
+            variant="header-badge"
+          />
+        }
       >
         <div className="mx-auto max-w-7xl">
           {/* Status Notice */}
@@ -274,24 +293,24 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
             </div>
 
             {/* Staff Metric Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 lg:gap-6">
               <StatCard
                 label="Active Reviewees"
-                value={String(metrics.activeReviewees)}
+                value={loadingUsers ? '...' : String(metrics.activeReviewees)}
                 icon={<GraduationCap size={18} />}
                 tone="blue"
                 subtitle="Active student accounts"
               />
               <StatCard
                 label="Score Folders Active"
-                value={String(metrics.publishedFolders)}
+                value={loadingFolders ? '...' : String(metrics.publishedFolders)}
                 icon={<FolderOpen size={18} />}
                 tone="teal"
                 subtitle="Available for score entry"
               />
               <StatCard
                 label="Total Scores Recorded"
-                value={String(metrics.totalScoresCount)}
+                value={loadingUsers ? '...' : String(metrics.totalScoresCount)}
                 icon={<ClipboardList size={18} />}
                 tone="purple"
                 subtitle="Assessment marks saved"
@@ -299,7 +318,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
             </div>
 
             {/* Quick Actions */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 lg:gap-6">
               <div
                 onClick={() => handleTabChange('scores')}
                 className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 hover:border-blue-400 transition-all shadow-sm cursor-pointer group hover:shadow-md flex flex-col justify-between"
@@ -429,8 +448,55 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
 
         {/* SCORES TAB */}
         {activeTab === 'scores' && (
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <RevieweeScoresDashboard currentUser={currentUser} />
+          <div className="space-y-4">
+            <div className="bg-white border border-slate-200/80 rounded-3xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+                  <ClipboardList className="text-teal-600" size={20} />
+                  Score Management & Matrix
+                </h2>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Encode, view, and synchronize reviewee examination scores across folders and board subject areas.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkScoreModalOpen(true)}
+                  className="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-blue-600/20 flex items-center gap-1.5 cursor-pointer"
+                  title="Upload examination scores in bulk via CSV spreadsheet"
+                >
+                  <Upload size={14} className="stroke-[2.5]" />
+                  <span>Upload Scores CSV</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScoreModalUser(null);
+                    setIsAddScoreModalOpen(true);
+                  }}
+                  className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-teal-600/20 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus size={15} className="stroke-[2.5]" />
+                  <span>Add Score</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Master Reviewee Scores Table */}
+            <div className="bg-white border border-slate-200/80 rounded-3xl p-4 sm:p-6 shadow-sm">
+              <RevieweeScoresTable
+                role="staff"
+                users={allUsers}
+                currentUser={currentUser}
+                isLoading={loadingUsers}
+                onAddScore={(user) => {
+                  setScoreModalUser(user);
+                  setIsAddScoreModalOpen(true);
+                }}
+                onViewProfile={(user) => handleTabChange('directory')}
+              />
+            </div>
           </div>
         )}
 
@@ -440,6 +506,10 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
             users={allUsers}
             loading={loadingUsers}
             onEditUser={(user) => setEditingUser(user)}
+            onAddScore={(user) => {
+              setScoreModalUser(user);
+              setIsAddScoreModalOpen(true);
+            }}
             currentUser={currentUser}
           />
         )}
@@ -516,6 +586,36 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({
         onSave={handleSaveUser}
         currentUserRole="Staff"
         allUsers={allUsers}
+      />
+    )}
+
+    {/* Add / Encode Score Modal */}
+    <AddScoreModal
+      isOpen={isAddScoreModalOpen}
+      onClose={() => {
+        setIsAddScoreModalOpen(false);
+        setScoreModalUser(null);
+      }}
+      allUsers={allUsers}
+      currentUser={currentUser}
+      preselectedUser={scoreModalUser}
+      onScoreAdded={({ revieweeName, score, total }) => {
+        setActionNotice(`Score of ${score}/${total} recorded for ${revieweeName}.`);
+        setTimeout(() => setActionNotice(null), 4000);
+      }}
+    />
+
+    {/* Bulk CSV Score Upload Modal */}
+    {isBulkScoreModalOpen && (
+      <BulkScoreUploadModal
+        isOpen={isBulkScoreModalOpen}
+        onClose={() => setIsBulkScoreModalOpen(false)}
+        allUsers={allUsers}
+        currentUser={currentUser}
+        onUploadComplete={(res) => {
+          setActionNotice(`Bulk uploaded ${res.successCount} score(s) successfully!`);
+          setTimeout(() => setActionNotice(null), 4000);
+        }}
       />
     )}
   </div>

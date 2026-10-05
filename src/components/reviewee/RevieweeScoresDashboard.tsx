@@ -1,14 +1,44 @@
 import React, { useMemo, useState } from 'react';
-import { FileText, TrendingUp, Award, CheckCircle2, Check, User, Folder, FolderSync } from 'lucide-react';
+import { 
+  FileText, 
+  TrendingUp, 
+  Award, 
+  CheckCircle2, 
+  Check, 
+  User, 
+  Folder, 
+  FolderSync, 
+  Plus, 
+  Upload,
+  Search,
+  Users,
+  ChevronDown,
+  Building2,
+  Sparkles,
+  BarChart3
+} from 'lucide-react';
 import { RevieweeData, ScoreFolder } from '../../types';
 import { ScoreRecord, parseScores } from '../../utils/scoreParser';
-import { normalizeScoreCategory, normalizeScoreSubject } from '../../utils/scoreFieldResolver';
+import { 
+  normalizeScoreCategory, 
+  normalizeScoreSubject, 
+  isValidActiveRevieweeWithId, 
+  getCanonicalRevieweeId, 
+  isMatchingSubtopic 
+} from '../../utils/scoreFieldResolver';
 import { useScoreFolders } from '../../hooks/useScoreFolders';
+import { useFirestoreUsers } from '../../hooks/useFirestoreUsers';
 import { isRevieweeInFolderScope, isFolderMatching } from '../../utils/folderScope';
 import { BoardMajorAreaCard } from './BoardMajorAreaCard';
 import { isFolderVisibleToReviewee } from '../../constants/folderTypes';
+import { deduplicateUsersByIdNumber } from '../../services/userIdentityResolver';
 import { AdminFolderSyncViewer } from '../AdminFolderSyncViewer';
+import { AddScoreModal } from '../AddScoreModal';
+import { BulkScoreUploadModal } from '../BulkScoreUploadModal';
+import { MajorAreaRevieweesBreakdownModal } from './MajorAreaRevieweesBreakdownModal';
 import { isAdminLike } from '../../utils/roleUtils';
+import { UserAvatar } from '../UserAvatar';
+import { AnimatedSelect, AnimatedSelectOption } from '../ui/animated-select';
 
 const SUBJECTS_BY_AREA: Record<string, { code: string; title: string }[]> = {
   "CLJ": [
@@ -65,14 +95,14 @@ const SUBJECTS_BY_AREA: Record<string, { code: string; title: string }[]> = {
 };
 
 const MAJOR_AREAS = ["CLJ", "LEA", "CDI", "FS", "CRIM", "CA"];
-const CATEGORIES = ["Diagnostic", "Pretest", "Posttest", "Quiz", "Daily Evaluation", "Removal", "Preboard"];
+const CATEGORIES = ["Daily Evaluation", "Diagnostic", "Pretest", "Posttest", "Quiz", "Removal", "Preboard"];
 
 function getScoreColor(rating: number) {
-  if (rating >= 80) return { text: "teal-600", bg: "teal-50", label: "Very Good" };
-  if (rating >= 70) return { text: "emerald-600", bg: "emerald-50", label: "Above Average" };
-  if (rating >= 60) return { text: "blue-600", bg: "blue-50", label: "Average" };
-  if (rating >= 50) return { text: "orange-600", bg: "orange-50", label: "Below Average" };
-  return { text: "red-600", bg: "red-50", label: "Needs Improvement" };
+  if (rating >= 80) return { text: "text-teal-600", bg: "bg-teal-50", label: "Very Good" };
+  if (rating >= 75) return { text: "text-emerald-600", bg: "bg-emerald-50", label: "Passing Standard" };
+  if (rating >= 60) return { text: "text-blue-600", bg: "bg-blue-50", label: "Average" };
+  if (rating >= 50) return { text: "text-orange-600", bg: "bg-orange-50", label: "Below Average" };
+  return { text: "text-rose-600", bg: "bg-rose-50", label: "Needs Improvement" };
 }
 
 interface Props {
@@ -105,7 +135,10 @@ const DEFAULT_MAIN_SCORE_FOLDER: ScoreFolder = {
 };
 
 export default function RevieweeScoresDashboard({ currentUser }: Props) {
+  const isStaffOrAdmin = isAdminLike(currentUser);
   const { folders } = useScoreFolders();
+  const { allUsers } = useFirestoreUsers();
+
   const publishedFolders = useMemo(() => {
     const validFolders = folders.filter(f => 
       isFolderVisibleToReviewee(f, currentUser, isRevieweeInFolderScope)
@@ -115,10 +148,34 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
     }
     return validFolders;
   }, [folders, currentUser]);
+
   const [selectedFolder, setSelectedFolder] = useState<ScoreFolder | null>(null);
   const [isFolderSyncModalOpen, setIsFolderSyncModalOpen] = useState(false);
-  
-  // Set default folder when folders load or reset if selectedFolder is deleted
+  const [isAddScoreModalOpen, setIsAddScoreModalOpen] = useState(false);
+  const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
+  const [breakdownModalArea, setBreakdownModalArea] = useState<string | null>(null);
+
+  // Filter reviewee users - ONLY active enrolled reviewees with an assigned ID number (deduplicated)
+  const revieweesList = useMemo(() => {
+    return deduplicateUsersByIdNumber(allUsers).filter(u => isValidActiveRevieweeWithId(u));
+  }, [allUsers]);
+
+  // Selected reviewee for Admin/Staff mode - defaults to active reviewee instead of 'all'
+  const [selectedRevieweeId, setSelectedRevieweeId] = useState<string>('');
+  const [revieweeSearchQuery, setRevieweeSearchQuery] = useState('');
+
+  // Auto-initialize default reviewee to the first active reviewee (not 'all')
+  React.useEffect(() => {
+    if (isStaffOrAdmin && revieweesList.length > 0) {
+      if (!selectedRevieweeId || (selectedRevieweeId !== 'all' && !revieweesList.some(u => (u.uid || (u as any).id || (u as any).doc_id) === selectedRevieweeId))) {
+        const firstActive = revieweesList[0];
+        const firstActiveId = firstActive.uid || (firstActive as any).id || (firstActive as any).doc_id;
+        setSelectedRevieweeId(firstActiveId);
+      }
+    }
+  }, [isStaffOrAdmin, revieweesList, selectedRevieweeId]);
+
+  // Auto-initialize default folder
   React.useEffect(() => {
     if (publishedFolders.length > 0) {
       if (!selectedFolder || !publishedFolders.some(f => f.id === selectedFolder.id)) {
@@ -129,10 +186,38 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
     }
   }, [publishedFolders, selectedFolder]);
 
+  // Determine active target reviewee data
+  const targetUser = useMemo(() => {
+    if (!isStaffOrAdmin) {
+      return currentUser;
+    }
+    if (selectedRevieweeId === 'all') {
+      return null; // Cohort / All mode
+    }
+    return revieweesList.find(u => (u.uid || u.id || (u as any).doc_id) === selectedRevieweeId) || null;
+  }, [isStaffOrAdmin, currentUser, selectedRevieweeId, revieweesList]);
+
   const [selectedMajorArea, setSelectedMajorArea] = useState("CLJ");
   const [selectedCategory, setSelectedCategory] = useState("Daily Evaluation");
 
-  const records = useMemo(() => parseScores(currentUser), [currentUser]);
+  // Parse records based on targetUser or cohort
+  const records = useMemo(() => {
+    if (targetUser) {
+      return parseScores(targetUser);
+    }
+
+    if (isStaffOrAdmin && selectedRevieweeId === 'all') {
+      // Aggregate across all reviewees
+      const allRecords: ScoreRecord[] = [];
+      revieweesList.forEach(rev => {
+        const revRecords = parseScores(rev);
+        allRecords.push(...revRecords);
+      });
+      return allRecords;
+    }
+
+    return parseScores(currentUser);
+  }, [targetUser, isStaffOrAdmin, selectedRevieweeId, revieweesList, currentUser]);
 
   // Filter records by selected folder
   const filteredRecords = useMemo(() => {
@@ -145,22 +230,24 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
   const totalPossibleOverall = filteredRecords.reduce((acc, r) => acc + (Number(r.totalItems) || 100), 0);
   const overallRating = totalPossibleOverall > 0 ? (totalEarnedOverall / totalPossibleOverall) * 100 : 0;
   
-  const completedExams = new Set(filteredRecords.map(r => `${r.date}_${r.category}`)).size;
+  const completedExams = new Set(filteredRecords.map(r => `${r.date}_${r.category}_${r.area}`)).size;
 
   // Major Area Stats
   const majorAreaStats = useMemo(() => {
     return MAJOR_AREAS.map(area => {
-      const areaRecords = filteredRecords.filter(r => normalizeScoreSubject(r.area).startsWith(normalizeScoreSubject(area)));
+      const targetSubjNorm = normalizeScoreSubject(area);
+      const areaRecords = filteredRecords.filter(r => {
+        const rSubjNorm = normalizeScoreSubject(r.area);
+        return rSubjNorm === targetSubjNorm || rSubjNorm.startsWith(targetSubjNorm);
+      });
       const earned = areaRecords.reduce((acc, r) => acc + (Number(r.score) || 0), 0);
       const possible = areaRecords.reduce((acc, r) => acc + (Number(r.totalItems) || 100), 0);
       const rating = possible > 0 ? (earned / possible) * 100 : 0;
-      return { area, rating, hasRecords: possible > 0 };
+      return { area, rating, hasRecords: possible > 0, count: areaRecords.length };
     });
   }, [filteredRecords]);
 
   const highestArea = [...majorAreaStats].filter(s => s.hasRecords).sort((a, b) => b.rating - a.rating)[0];
-
-  const isDailyEval = normalizeScoreCategory(selectedCategory) === 'dailyevaluation';
 
   const MAJOR_AREA_TITLES: Record<string, string> = {
     "CLJ": "Criminal Law and Jurisprudence",
@@ -171,18 +258,21 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
     "CA": "Correctional Administration",
   };
 
-  // Specific Table Data
+  // Specific Category Records
   const currentCategoryRecords = useMemo(() => {
+    const targetNormCat = normalizeScoreCategory(selectedCategory);
     return filteredRecords.filter(r => 
-      normalizeScoreCategory(r.category) === normalizeScoreCategory(selectedCategory)
+      normalizeScoreCategory(r.category) === targetNormCat
     );
   }, [filteredRecords, selectedCategory]);
 
+  // Gather unique dates for the selected category & area
   const uniqueDates = useMemo(() => {
     const dates = new Set<string>();
+    const targetSubj = normalizeScoreSubject(selectedMajorArea);
+
     currentCategoryRecords.forEach(r => {
       const scoreSubj = normalizeScoreSubject(r.area);
-      const targetSubj = normalizeScoreSubject(selectedMajorArea);
       if (scoreSubj === targetSubj || scoreSubj.startsWith(targetSubj)) {
         if (r.date) dates.add(r.date);
       }
@@ -191,196 +281,377 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
   }, [currentCategoryRecords, selectedMajorArea]);
 
   const subjects = useMemo(() => {
-    if (isDailyEval) {
-      return SUBJECTS_BY_AREA[selectedMajorArea] || [];
-    }
-    return [{
-      code: selectedMajorArea,
-      title: MAJOR_AREA_TITLES[selectedMajorArea] || selectedMajorArea
-    }];
-  }, [isDailyEval, selectedMajorArea]);
+    const defaultSubjs = SUBJECTS_BY_AREA[selectedMajorArea] || [];
+    return defaultSubjs;
+  }, [selectedMajorArea]);
 
-  const tableData = subjects.map(subj => {
-    const subjRecords = currentCategoryRecords.filter(r => {
-      const scoreSubj = normalizeScoreSubject(r.area);
-      const targetSubj = normalizeScoreSubject(subj.code);
-      if (isDailyEval) {
-        return scoreSubj === targetSubj;
-      } else {
-        return scoreSubj === targetSubj || scoreSubj.startsWith(targetSubj);
+  // Compute table data for sub-subjects
+  const tableData = useMemo(() => {
+    return subjects.map(subj => {
+      const subjRecords = currentCategoryRecords.filter(r => isMatchingSubtopic(r.area, subj.code, subj.title));
+
+      let rowEarned = 0;
+      let rowPossible = 0;
+      const dateScores: Record<string, { earned: number; possible: number; count: number }> = {};
+      
+      if (uniqueDates.length > 0) {
+        uniqueDates.forEach(d => {
+          const recs = subjRecords.filter(r => r.date === d);
+          if (recs.length > 0) {
+            const sumEarned = recs.reduce((sum, r) => sum + (Number(r.score) || 0), 0);
+            const sumPossible = recs.reduce((sum, r) => sum + (Number(r.totalItems) || 100), 0);
+            dateScores[d] = {
+              earned: Number((sumEarned / recs.length).toFixed(1)),
+              possible: Number((sumPossible / recs.length).toFixed(0)),
+              count: recs.length
+            };
+            rowEarned += dateScores[d].earned;
+            rowPossible += dateScores[d].possible;
+          }
+        });
+      } else if (subjRecords.length > 0) {
+        subjRecords.forEach(rec => {
+          rowEarned += Number(rec.score) || 0;
+          rowPossible += Number(rec.totalItems) || 100;
+        });
       }
+
+      return {
+        subject: subj,
+        dateScores,
+        rowEarned,
+        rowPossible,
+        rating: rowPossible > 0 ? (rowEarned / rowPossible) * 100 : 0,
+        hasRecords: rowPossible > 0
+      };
     });
+  }, [subjects, currentCategoryRecords, uniqueDates]);
 
-    let rowEarned = 0;
-    let rowPossible = 0;
-    const dateScores: Record<string, { earned: number, possible: number }> = {};
-    
-    if (uniqueDates.length > 0) {
-      uniqueDates.forEach(d => {
-        const rec = subjRecords.find(r => r.date === d);
-        if (rec) {
-          dateScores[d] = { earned: Number(rec.score) || 0, possible: Number(rec.totalItems) || 100 };
-          rowEarned += dateScores[d].earned;
-          rowPossible += dateScores[d].possible;
-        }
-      });
-    } else if (subjRecords.length > 0) {
-      subjRecords.forEach(rec => {
-        rowEarned += Number(rec.score) || 0;
-        rowPossible += Number(rec.totalItems) || 100;
-      });
-    }
-
-    return {
-      subject: subj,
-      dateScores,
-      rowEarned,
-      rowPossible,
-      rating: rowPossible > 0 ? (rowEarned / rowPossible) * 100 : 0,
-      hasRecords: rowPossible > 0
-    };
-  });
-
-  // Major Area Wide records for Daily Evaluation summary at bottom
+  // Major Area Level Score Records (e.g. general area examination scores like "FS", "CLJ", etc.)
   const majorAreaWideRecords = useMemo(() => {
-    if (!isDailyEval) return [];
-    return currentCategoryRecords.filter(r => 
-      normalizeScoreSubject(r.area) === normalizeScoreSubject(selectedMajorArea)
-    );
-  }, [isDailyEval, currentCategoryRecords, selectedMajorArea]);
+    const targetNormArea = normalizeScoreSubject(selectedMajorArea);
+    return currentCategoryRecords.filter(r => {
+      const scoreSubj = normalizeScoreSubject(r.area);
+      return scoreSubj === targetNormArea;
+    });
+  }, [currentCategoryRecords, selectedMajorArea]);
 
   const majorAreaWideData = useMemo(() => {
-    if (!isDailyEval || majorAreaWideRecords.length === 0) return null;
+    if (majorAreaWideRecords.length === 0) return null;
     
     let rowEarned = 0;
     let rowPossible = 0;
-    const dateScores: Record<string, { earned: number, possible: number }> = {};
+    const dateScores: Record<string, { earned: number; possible: number; count: number }> = {};
     
     uniqueDates.forEach(d => {
-      const rec = majorAreaWideRecords.find(r => r.date === d);
-      if (rec) {
-        dateScores[d] = { earned: Number(rec.score) || 0, possible: Number(rec.totalItems) || 100 };
+      const recs = majorAreaWideRecords.filter(r => r.date === d);
+      if (recs.length > 0) {
+        const sumEarned = recs.reduce((sum, r) => sum + (Number(r.score) || 0), 0);
+        const sumPossible = recs.reduce((sum, r) => sum + (Number(r.totalItems) || 100), 0);
+        dateScores[d] = {
+          earned: Number((sumEarned / recs.length).toFixed(1)),
+          possible: Number((sumPossible / recs.length).toFixed(0)),
+          count: recs.length,
+        };
         rowEarned += dateScores[d].earned;
         rowPossible += dateScores[d].possible;
       }
     });
 
     return {
-      subject: { code: selectedMajorArea, title: "Major Area Overall / Diagnostic" },
+      subject: { 
+        code: selectedMajorArea, 
+        title: `${MAJOR_AREA_TITLES[selectedMajorArea] || selectedMajorArea} (Comprehensive / Area Score)` 
+      },
       dateScores,
       rowEarned,
       rowPossible,
       rating: rowPossible > 0 ? (rowEarned / rowPossible) * 100 : 0,
       hasRecords: rowPossible > 0
     };
-  }, [isDailyEval, majorAreaWideRecords, uniqueDates, selectedMajorArea]);
+  }, [majorAreaWideRecords, uniqueDates, selectedMajorArea, MAJOR_AREA_TITLES]);
 
+  // Combined totals for the area
   const totalAreaEarned = tableData.reduce((acc, row) => acc + row.rowEarned, 0) + (majorAreaWideData?.rowEarned || 0);
   const totalAreaPossible = tableData.reduce((acc, row) => acc + row.rowPossible, 0) + (majorAreaWideData?.rowPossible || 0);
   const totalAreaRating = totalAreaPossible > 0 ? (totalAreaEarned / totalAreaPossible) * 100 : 0;
 
+  // Options for AnimatedSelect Reviewee Dropdown Card
+  const revieweeSelectOptions = useMemo<AnimatedSelectOption[]>(() => {
+    const list: AnimatedSelectOption[] = [
+      {
+        value: 'all',
+        label: 'All Reviewees (Class Cohort)',
+        description: 'Aggregate class performance matrix & distribution',
+        badge: `${revieweesList.length} Students`,
+        icon: <Users size={14} className="text-teal-600" />,
+      },
+    ];
+
+    revieweesList.forEach(u => {
+      const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.displayName || u.email;
+      const idNum = getCanonicalRevieweeId(u);
+      const school = (u as any).school || (u as any).school_name || 'Enrolled Reviewee';
+      const uid = u.uid || (u as any).id || (u as any).doc_id;
+
+      list.push({
+        value: uid,
+        label: name,
+        description: `ID: ${idNum} • ${school}`,
+        badge: idNum,
+      });
+    });
+
+    return list;
+  }, [revieweesList]);
+
   return (
     <div className="flex flex-col h-full bg-white overflow-auto">
-      <div className="p-6 pb-24 space-y-6 max-w-7xl mx-auto w-full">
+      <div className="space-y-6 max-w-7xl mx-auto w-full">
         {/* Header Section */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
           <div>
-            <h1 className="text-3xl font-black text-slate-900">My Scores</h1>
-            <p className="text-sm font-semibold text-slate-500 mt-1">
-              View your scores by board subject area, examination category, and examination date.
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">
+              <BarChart3 className="text-teal-600" size={24} />
+              <span>Score Management & Performance Matrix</span>
+            </h1>
+            <p className="text-xs sm:text-sm font-semibold text-slate-500 mt-0.5">
+              Review examination ratings, evaluation dates, and major area score distributions in real time.
             </p>
           </div>
-          <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2">
-            <TrendingUp className="text-slate-400" size={16} />
-            <span className="text-xs font-bold text-slate-700">Live Updating</span>
+          <div className="bg-teal-50/80 px-3.5 py-1.5 rounded-xl border border-teal-200/80 flex items-center gap-2 self-start sm:self-auto shadow-2xs">
+            <TrendingUp className="text-teal-600" size={15} />
+            <span className="text-xs font-black text-teal-800">Live Synchronized</span>
           </div>
         </div>
 
-        {/* Published Folder Selector */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2">
+        {/* ADMIN / STAFF: Reviewee Student Selector Bar */}
+        {isStaffOrAdmin && (
+          <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl p-3.5 sm:p-4 shadow-md border border-slate-700/70 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center text-teal-300 shrink-0">
+                <Users size={20} />
+              </div>
+              <div>
+                <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
+                  Target Reviewee Performance Scope
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-teal-500/20 text-teal-300 px-2 py-0.5 rounded-full border border-teal-400/30">
+                    {revieweesList.length} Reviewees
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-300 font-medium">
+                  {selectedRevieweeId === 'all' 
+                    ? 'Showing aggregated class cohort performance across all reviewees' 
+                    : targetUser 
+                    ? `Showing individual score records for ${targetUser.first_name} ${targetUser.last_name} (${targetUser.seq_id || targetUser.id_number || 'No ID'})`
+                    : 'Select a reviewee to inspect individual scores'}
+                </p>
+              </div>
+            </div>
+
+            {/* Selector Animated Dropdown Card */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 min-w-0 lg:max-w-md w-full">
+              <div className="flex-1 min-w-0">
+                <AnimatedSelect
+                  value={selectedRevieweeId}
+                  options={revieweeSelectOptions}
+                  onChange={setSelectedRevieweeId}
+                  placeholder="Select a reviewee..."
+                  searchPlaceholder="Search reviewee by name or ID..."
+                  label="Target Reviewee Performance Scope"
+                  variant="compact-popover"
+                  triggerClassName="h-10 bg-slate-800/90 border-slate-600/90 text-white hover:bg-slate-800 hover:border-teal-400/50 shadow-sm"
+                  triggerTextClassName="text-white font-bold text-xs"
+                />
+              </div>
+
+              {selectedRevieweeId !== 'all' ? (
+                <button
+                  type="button"
+                  onClick={() => setSelectedRevieweeId('all')}
+                  className="px-3 h-10 bg-slate-700/80 hover:bg-slate-600 text-slate-200 text-xs font-bold rounded-xl transition-colors cursor-pointer shrink-0 flex items-center justify-center border border-slate-600/70 whitespace-nowrap"
+                  title="Switch to All Reviewees cohort summary"
+                >
+                  Cohort View
+                </button>
+              ) : (
+                revieweesList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const firstActive = revieweesList[0];
+                      const firstActiveId = firstActive.uid || (firstActive as any).id || (firstActive as any).doc_id;
+                      setSelectedRevieweeId(firstActiveId);
+                    }}
+                    className="px-3 h-10 bg-teal-700/80 hover:bg-teal-600 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shrink-0 flex items-center justify-center border border-teal-500/70 whitespace-nowrap"
+                    title="Switch back to active reviewee view"
+                  >
+                    Active Reviewee
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Published Folder Selector Bar & Action Controls */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <span className="text-xs font-black uppercase tracking-wider text-slate-400 shrink-0 mr-1 flex items-center gap-1">
+            <Folder size={14} className="text-slate-500" />
+            Folder:
+          </span>
           {publishedFolders.map(folder => (
             <button
               key={folder.id}
               onClick={() => setSelectedFolder(folder)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
                 selectedFolder?.id === folder.id
-                  ? 'bg-slate-900 text-white shadow-lg scale-105'
+                  ? 'bg-slate-900 text-white shadow-sm scale-[1.02]'
                   : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
               }`}
             >
-              <Folder size={14} className={selectedFolder?.id === folder.id ? "text-teal-400" : "text-slate-400"} />
-              {folder.name}
+              <Folder size={13} className={selectedFolder?.id === folder.id ? "text-teal-400" : "text-slate-400"} />
+              <span>{folder.name}</span>
             </button>
           ))}
           {publishedFolders.length === 0 && (
-            <div className="text-xs font-bold text-slate-400 italic py-2">No published folders available</div>
+            <div className="text-xs font-bold text-slate-400 italic py-1.5">No published score folders</div>
           )}
 
-          <button
-            onClick={() => setIsFolderSyncModalOpen(true)}
-            className="ml-auto px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 shrink-0 shadow-sm cursor-pointer"
-            title="Verify and synchronize folders created by admin"
-          >
-            <FolderSync size={14} className="text-teal-600" />
-            <span>Admin Folder Sync</span>
-          </button>
+          {isStaffOrAdmin && (
+            <div className="ml-auto flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setIsBulkUploadModalOpen(true)}
+                className="px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shadow-xs cursor-pointer"
+                title="Upload examination scores in bulk via CSV spreadsheet or ZipGrade"
+              >
+                <Upload size={13} className="stroke-[2.5]" />
+                <span>Upload CSV</span>
+              </button>
+              <button
+                onClick={() => setIsAddScoreModalOpen(true)}
+                className="px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white shadow-xs cursor-pointer"
+                title="Add or encode a new score"
+              >
+                <Plus size={13} className="stroke-[3]" />
+                <span>Add Score</span>
+              </button>
+              <button
+                onClick={() => setIsFolderSyncModalOpen(true)}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200/80 shadow-2xs cursor-pointer"
+                title="Verify and synchronize folders created by admin"
+              >
+                <FolderSync size={13} className="text-teal-600" />
+                <span className="hidden sm:inline">Sync Hub</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Top Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-              <TrendingUp size={24} />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs flex items-center gap-3.5">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-teal-50 text-teal-600 border border-teal-200/60 flex items-center justify-center shrink-0">
+              <TrendingUp size={22} />
             </div>
-            <div>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Overall Rating</p>
-              <p className="text-xl font-black text-slate-900">{overallRating.toFixed(2)}%</p>
-              <p className={`text-[10px] font-bold mt-0.5 ${getScoreColor(overallRating).text}`}>{getScoreColor(overallRating).label}</p>
+            <div className="min-w-0">
+              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-wider truncate">
+                {selectedRevieweeId === 'all' && isStaffOrAdmin ? 'Cohort Average' : 'Overall Rating'}
+              </p>
+              <p className="text-lg sm:text-xl font-black text-slate-900 font-mono tracking-tight">
+                {overallRating.toFixed(2)}%
+              </p>
+              <p className={`text-[10px] font-extrabold truncate ${getScoreColor(overallRating).text}`}>
+                {getScoreColor(overallRating).label}
+              </p>
             </div>
           </div>
           
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <Award size={24} />
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs flex items-center gap-3.5">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/60 flex items-center justify-center shrink-0">
+              <Award size={22} />
             </div>
-            <div>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Highest Area</p>
-              <p className="text-xl font-black text-slate-900">{highestArea?.area || 'N/A'}</p>
-              {highestArea && (
-                <p className={`text-[10px] font-bold mt-0.5 ${getScoreColor(highestArea.rating).text}`}>{highestArea.rating.toFixed(2)}%</p>
+            <div className="min-w-0">
+              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-wider truncate">Highest Major Area</p>
+              <p className="text-lg sm:text-xl font-black text-slate-900 truncate">{highestArea?.area || 'N/A'}</p>
+              {highestArea && highestArea.hasRecords ? (
+                <p className={`text-[10px] font-extrabold truncate ${getScoreColor(highestArea.rating).text}`}>
+                  {highestArea.rating.toFixed(2)}% average
+                </p>
+              ) : (
+                <p className="text-[10px] text-slate-400 font-medium">Awaiting exams</p>
               )}
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-              <FileText size={24} />
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs flex items-center gap-3.5">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-purple-50 text-purple-600 border border-purple-200/60 flex items-center justify-center shrink-0">
+              <FileText size={22} />
             </div>
-            <div>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Completed Examinations</p>
-              <p className="text-xl font-black text-slate-900">{completedExams}</p>
-              <p className="text-[10px] font-bold text-slate-400 mt-0.5">Recorded Sessions</p>
+            <div className="min-w-0">
+              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-wider truncate">Evaluations Recorded</p>
+              <p className="text-lg sm:text-xl font-black text-slate-900 font-mono">{filteredRecords.length}</p>
+              <p className="text-[10px] font-bold text-slate-400 truncate">{completedExams} distinct sessions</p>
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
-              <User size={24} />
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs flex items-center gap-3.5">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200/60 flex items-center justify-center shrink-0">
+              <User size={22} />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Reviewee ID</p>
-              <p className="text-base font-black text-slate-900 truncate">{currentUser.id_number || 'No ID'}</p>
-              <p className="text-[10px] font-bold text-slate-400 mt-0.5 truncate">{currentUser.first_name} {currentUser.last_name}</p>
+              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-wider truncate">
+                {selectedRevieweeId === 'all' && isStaffOrAdmin ? 'Cohort Scope' : 'Reviewee ID'}
+              </p>
+              <p className="text-sm sm:text-base font-black text-slate-900 truncate font-mono">
+                {targetUser 
+                  ? (targetUser.seq_id || targetUser.seqId || targetUser.id_number || 'No ID')
+                  : selectedRevieweeId === 'all'
+                  ? `${revieweesList.length} Students`
+                  : (currentUser.seq_id || currentUser.id_number || 'No ID')}
+              </p>
+              <p className="text-[10px] font-bold text-slate-500 truncate">
+                {targetUser 
+                  ? `${targetUser.first_name || ''} ${targetUser.last_name || ''}`.trim()
+                  : selectedRevieweeId === 'all'
+                  ? 'All Enrolled Reviewees'
+                  : `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim()}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Board Major Area Grid */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-          <h2 className="text-lg font-black text-slate-900 mb-1">Board Major Area</h2>
-          <p className="text-xs font-medium text-slate-500 mb-4">Select a major area to view scores by examination category.</p>
+        {/* Board Major Area Grid Cards */}
+        <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200/90 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3.5">
+            <div>
+              <h2 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
+                <span>Board Major Areas (6 Subject Areas)</span>
+                <span className="hidden sm:inline-block px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-extrabold border border-slate-200">
+                  Double-click to view reviewee subtopic list
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Click any major area card to switch the matrix inspection view. <strong className="text-teal-700">Double-click</strong> any card to open the complete reviewee subtopic scores table.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setBreakdownModalArea(selectedMajorArea)}
+                className="px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                title={`Open full ${selectedMajorArea} subtopic reviewee breakdown table`}
+              >
+                <Users size={13} className="text-teal-600" />
+                <span>Open {selectedMajorArea} Subtopics</span>
+              </button>
+              <span className="text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-1 rounded-lg">
+                Active: {selectedMajorArea}
+              </span>
+            </div>
+          </div>
           
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
             {majorAreaStats.map(stat => {
               const isSelected = selectedMajorArea === stat.area;
               const colors: Record<string, string> = {
@@ -403,27 +674,34 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
                   watermark={stat.area}
                   isSelected={isSelected}
                   onClick={() => setSelectedMajorArea(stat.area)}
+                  onDoubleClick={() => setBreakdownModalArea(stat.area)}
                 />
               );
             })}
           </div>
         </div>
 
-        {/* Table Section */}
-        <div>
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-3">
-            <h2 className="text-lg font-black text-slate-800">
-              Selected Major Area: <span className="text-blue-600">{selectedMajorArea}</span>
-            </h2>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold text-slate-500 mr-2">Selected Category:</span>
+        {/* Target Category Matrix Section */}
+        <div className="space-y-3">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+            <div>
+              <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+                <span>Selected Major Area:</span>
+                <span className="text-teal-700 font-mono">{selectedMajorArea}</span>
+                <span className="text-xs text-slate-400 font-normal">({MAJOR_AREA_TITLES[selectedMajorArea]})</span>
+              </h2>
+            </div>
+
+            {/* Category Selector Tabs */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] font-black uppercase text-slate-400 mr-1">Category:</span>
               {CATEGORIES.map(cat => (
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     selectedCategory === cat
-                      ? 'bg-emerald-700 text-white shadow-sm'
+                      ? 'bg-teal-700 text-white shadow-xs font-black'
                       : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                   }`}
                 >
@@ -433,86 +711,57 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xs border border-slate-200/90 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr>
-                    <th rowSpan={2} className="px-4 py-3 bg-[#111827] text-white font-bold w-12 text-center border-r border-slate-700/50">#</th>
-                    <th rowSpan={2} className="px-4 py-3 bg-[#111827] text-white font-bold min-w-[300px] border-r border-slate-700/50">Subject</th>
-                    <th colSpan={Math.max(uniqueDates.length, 1)} className="px-4 py-2 bg-[#1f2937] text-white text-center font-bold border-b border-slate-700/50 border-r border-slate-700/50">
-                      {selectedCategory} Scores
+                    <th rowSpan={2} className="px-3.5 py-3 bg-[#0f172a] text-white font-black w-10 text-center border-r border-slate-700/60">#</th>
+                    <th rowSpan={2} className="px-3.5 py-3 bg-[#0f172a] text-white font-black min-w-[260px] border-r border-slate-700/60">Subject & Examination Title</th>
+                    <th colSpan={Math.max(uniqueDates.length, 1)} className="px-3.5 py-2 bg-[#1e293b] text-teal-300 text-center font-black uppercase tracking-wider text-[10px] border-b border-slate-700/60 border-r border-slate-700/60">
+                      {selectedCategory} Scores ({selectedMajorArea})
                     </th>
-                    <th rowSpan={2} className="px-4 py-3 bg-[#111827] text-white font-bold text-center w-32 border-r border-slate-700/50">
-                      Combined<br/><span className="text-[10px] font-normal text-slate-400">Total</span>
+                    <th rowSpan={2} className="px-3.5 py-3 bg-[#0f172a] text-white font-black text-center w-28 border-r border-slate-700/60">
+                      Combined<br/><span className="text-[9px] font-normal text-slate-400">Total Points</span>
                     </th>
-                    <th rowSpan={2} className="px-4 py-3 bg-[#111827] text-white font-bold text-center w-24">
-                      Rating<br/><span className="text-[10px] font-normal text-slate-400">(Percentage)</span>
+                    <th rowSpan={2} className="px-3.5 py-3 bg-[#0f172a] text-white font-black text-center w-24">
+                      Rating<br/><span className="text-[9px] font-normal text-slate-400">(Percentage)</span>
                     </th>
                   </tr>
                   <tr>
                     {uniqueDates.length === 0 ? (
-                      <th className="px-4 py-2 bg-[#111827] text-slate-400 text-center text-[10px] font-semibold border-r border-slate-700/50">No Dates Available</th>
+                      <th className="px-3.5 py-2 bg-[#0f172a] text-slate-400 text-center text-[10px] font-semibold border-r border-slate-700/60">
+                        No examination dates recorded in this category
+                      </th>
                     ) : (
                       uniqueDates.map(date => (
-                        <th key={date} className="px-4 py-2 bg-[#111827] text-white text-center text-[10px] font-bold border-r border-slate-700/50">
+                        <th key={date} className="px-3 py-2 bg-[#0f172a] text-slate-200 text-center text-[10px] font-bold border-r border-slate-700/60 whitespace-nowrap">
                           {new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </th>
                       ))
                     )}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {tableData.map((row, idx) => (
-                    <tr key={row.subject.code} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 text-center text-slate-500 font-medium border-r border-slate-100">{idx + 1}</td>
-                      <td className="px-4 py-3 text-slate-700 font-medium border-r border-slate-100">
-                        <span className="font-bold mr-1">{row.subject.code}</span> {row.subject.title}
-                      </td>
-                      {uniqueDates.length === 0 ? (
-                        <td className="px-4 py-3 text-center text-slate-300 border-r border-slate-100">-</td>
-                      ) : (
-                        uniqueDates.map(date => {
-                          const val = row.dateScores[date];
-                          return (
-                            <td key={date} className="px-4 py-3 text-center border-r border-slate-100">
-                              {val ? (
-                                <span className="font-bold text-slate-700">{val.earned}/{val.possible}</span>
-                              ) : (
-                                <span className="text-slate-300">-</span>
-                              )}
-                            </td>
-                          );
-                        })
-                      )}
-                      <td className="px-4 py-3 text-center border-r border-slate-100 font-bold bg-slate-50/50 text-slate-800">
-                        {row.hasRecords ? `${row.rowEarned}/${row.rowPossible}` : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-center font-black bg-slate-50/50">
-                        {row.hasRecords ? (
-                          <span className={getScoreColor(row.rating).text.replace('text-', 'text-')}>{row.rating.toFixed(2)}%</span>
-                        ) : (
-                          <span className="text-slate-400 font-bold">0.00%</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                  {/* Comprehensive Area Row if available */}
                   {majorAreaWideData && (
-                    <tr className="bg-blue-50/30 hover:bg-blue-50/50 transition-colors border-t-2 border-slate-200">
-                      <td className="px-4 py-3 text-center text-blue-600 font-black border-r border-blue-100">★</td>
-                      <td className="px-4 py-3 text-blue-900 font-black border-r border-blue-100">
-                        {majorAreaWideData.subject.title}
+                    <tr className="bg-teal-50/40 hover:bg-teal-50/70 transition-colors border-b-2 border-teal-200/80">
+                      <td className="px-3.5 py-3 text-center text-teal-700 font-black border-r border-teal-100">★</td>
+                      <td className="px-3.5 py-3 text-teal-950 font-black border-r border-teal-100">
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-1.5 py-0.5 rounded bg-teal-600 text-white text-[9px] font-black">{selectedMajorArea}</span>
+                          <span>{majorAreaWideData.subject.title}</span>
+                        </div>
                       </td>
                       {uniqueDates.length === 0 ? (
-                        <td className="px-4 py-3 text-center text-slate-300 border-r border-slate-100">-</td>
+                        <td className="px-3.5 py-3 text-center text-slate-300 border-r border-teal-100">-</td>
                       ) : (
                         uniqueDates.map(date => {
                           const val = majorAreaWideData.dateScores[date];
                           return (
-                            <td key={date} className="px-4 py-3 text-center border-r border-blue-100 bg-blue-50/20">
+                            <td key={date} className="px-3.5 py-3 text-center border-r border-teal-100 font-black bg-teal-50/60">
                               {val ? (
-                                <span className="font-black text-blue-700">{val.earned}/{val.possible}</span>
+                                <span className="text-teal-800 font-mono font-black">{val.earned}/{val.possible}</span>
                               ) : (
                                 <span className="text-slate-300">-</span>
                               )}
@@ -520,23 +769,60 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
                           );
                         })
                       )}
-                      <td className="px-4 py-3 text-center border-r border-blue-100 font-black bg-blue-100/50 text-blue-900">
+                      <td className="px-3.5 py-3 text-center border-r border-teal-100 font-black bg-teal-100/50 text-teal-900 font-mono">
                         {majorAreaWideData.hasRecords ? `${majorAreaWideData.rowEarned}/${majorAreaWideData.rowPossible}` : '-'}
                       </td>
-                      <td className="px-4 py-3 text-center font-black bg-blue-100/50">
+                      <td className="px-3.5 py-3 text-center font-black bg-teal-100/60">
                         {majorAreaWideData.hasRecords ? (
-                          <span className="text-blue-700">{majorAreaWideData.rating.toFixed(2)}%</span>
+                          <span className="text-teal-800 font-mono">{majorAreaWideData.rating.toFixed(2)}%</span>
                         ) : (
                           <span className="text-slate-400 font-bold">0.00%</span>
                         )}
                       </td>
                     </tr>
                   )}
-                  
-                  {tableData.length === 0 && (
+
+                  {/* Sub-Subject Rows */}
+                  {tableData.map((row, idx) => (
+                    <tr key={row.subject.code} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="px-3.5 py-2.5 text-center text-slate-400 font-semibold border-r border-slate-100">{idx + 1}</td>
+                      <td className="px-3.5 py-2.5 text-slate-800 border-r border-slate-100">
+                        <span className="font-black text-slate-900 mr-1.5">{row.subject.code}</span>
+                        <span className="text-slate-600 text-xs">{row.subject.title}</span>
+                      </td>
+                      {uniqueDates.length === 0 ? (
+                        <td className="px-3.5 py-2.5 text-center text-slate-300 border-r border-slate-100">-</td>
+                      ) : (
+                        uniqueDates.map(date => {
+                          const val = row.dateScores[date];
+                          return (
+                            <td key={date} className="px-3 py-2.5 text-center border-r border-slate-100">
+                              {val ? (
+                                <span className="font-bold font-mono text-slate-800">{val.earned}/{val.possible}</span>
+                              ) : (
+                                <span className="text-slate-300">-</span>
+                              )}
+                            </td>
+                          );
+                        })
+                      )}
+                      <td className="px-3.5 py-2.5 text-center border-r border-slate-100 font-bold bg-slate-50/40 text-slate-800 font-mono">
+                        {row.hasRecords ? `${row.rowEarned}/${row.rowPossible}` : '-'}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-center font-black bg-slate-50/40">
+                        {row.hasRecords ? (
+                          <span className={`${getScoreColor(row.rating).text} font-mono`}>{row.rating.toFixed(2)}%</span>
+                        ) : (
+                          <span className="text-slate-400 font-bold font-mono">0.00%</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+
+                  {tableData.length === 0 && !majorAreaWideData && (
                     <tr>
                       <td colSpan={5 + Math.max(uniqueDates.length, 1)} className="px-4 py-8 text-center text-slate-500 font-medium">
-                        No subjects defined for {selectedMajorArea}.
+                        No evaluation scores found for {selectedMajorArea} in category "{selectedCategory}".
                       </td>
                     </tr>
                   )}
@@ -544,15 +830,23 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
               </table>
             </div>
 
-            {/* Total Area Footer */}
-            <div className="bg-emerald-50 border-t border-emerald-100 p-4 flex items-center gap-4">
-              <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                <CheckCircle2 size={16} />
+            {/* Area Matrix Total Summary Footer */}
+            <div className="bg-slate-50 border-t border-slate-200/80 p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0">
+                  <CheckCircle2 size={18} />
+                </div>
+                <div>
+                  <span className="text-xs font-black text-slate-900">Total {selectedMajorArea} ({selectedCategory}):</span>
+                  <p className="text-[11px] text-slate-500 font-medium">Combined score and performance index for this category</p>
+                </div>
               </div>
-              <div className="flex items-baseline gap-4">
-                <span className="text-sm font-black text-emerald-950">Overall {selectedMajorArea}:</span>
-                <span className="text-base font-black text-emerald-800">{totalAreaEarned}/{totalAreaPossible} • {totalAreaRating.toFixed(2)}%</span>
-                <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider ml-2">{getScoreColor(totalAreaRating).label}</span>
+              <div className="flex items-baseline gap-3 self-end sm:self-auto">
+                <span className="text-sm font-bold font-mono text-slate-600">{totalAreaEarned} / {totalAreaPossible} pts</span>
+                <span className="text-base font-black font-mono text-teal-800">{totalAreaRating.toFixed(2)}%</span>
+                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${getScoreColor(totalAreaRating).bg} ${getScoreColor(totalAreaRating).text}`}>
+                  {getScoreColor(totalAreaRating).label}
+                </span>
               </div>
             </div>
           </div>
@@ -561,7 +855,7 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
 
       {isFolderSyncModalOpen && (
         <div className="fixed inset-0 z-[100000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-5xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[92vh] flex flex-col animate-in zoom-in-95">
+          <div className="bg-slate-50 rounded-3xl max-w-5xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[90vh] flex flex-col min-h-0 animate-in zoom-in-95">
             <AdminFolderSyncViewer
               currentUser={currentUser}
               isModal={true}
@@ -569,6 +863,42 @@ export default function RevieweeScoresDashboard({ currentUser }: Props) {
             />
           </div>
         </div>
+      )}
+
+      {/* Add / Encode Score Modal */}
+      {isAddScoreModalOpen && (
+        <AddScoreModal
+          isOpen={isAddScoreModalOpen}
+          onClose={() => setIsAddScoreModalOpen(false)}
+          allUsers={allUsers}
+          currentUser={currentUser}
+          preselectedUser={targetUser || (currentUser?.role === 'Reviewee' ? currentUser : null)}
+          preselectedFolderId={selectedFolder?.id}
+        />
+      )}
+
+      {/* Bulk CSV Score Upload Modal */}
+      {isBulkUploadModalOpen && (
+        <BulkScoreUploadModal
+          isOpen={isBulkUploadModalOpen}
+          onClose={() => setIsBulkUploadModalOpen(false)}
+          allUsers={allUsers}
+          currentUser={currentUser}
+          preselectedFolderId={selectedFolder?.id}
+        />
+      )}
+
+      {/* Double-Click Major Area Subtopics Reviewee Breakdown Modal */}
+      {breakdownModalArea && (
+        <MajorAreaRevieweesBreakdownModal
+          isOpen={!!breakdownModalArea}
+          onClose={() => setBreakdownModalArea(null)}
+          areaCode={breakdownModalArea}
+          allUsers={allUsers}
+          folders={publishedFolders}
+          selectedFolderId={selectedFolder?.id || 'all'}
+          initialCategory={selectedCategory}
+        />
       )}
     </div>
   );

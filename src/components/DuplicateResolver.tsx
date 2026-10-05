@@ -23,6 +23,7 @@ import {
   getUserAccountStatus,
   deduplicateUsersByIdNumber,
 } from '../services/userIdentityResolver';
+import { isCanonicalActiveReviewee } from '../utils/canonicalActiveReviewee';
 import { getUserRole } from '../utils/roleUtils';
 import { UserAvatar } from './UserAvatar';
 
@@ -55,7 +56,7 @@ export const DuplicateResolver: React.FC<DuplicateResolverProps> = ({
       const isReviewee = role !== 'admin' && role !== 'staff';
 
       if (filterScope === 'active_reviewees') {
-        return isReviewee && status === 'active';
+        return isCanonicalActiveReviewee(u);
       }
       if (filterScope === 'all_reviewees') {
         return isReviewee && status !== 'deleted';

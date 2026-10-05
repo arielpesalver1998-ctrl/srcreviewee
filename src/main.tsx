@@ -4,10 +4,60 @@ import App from "./App";
 import "./index.css";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 
+// --- Global Circular-Safe JSON.stringify Patch ---
+const nativeJSONStringify = JSON.stringify;
+
+export function safeJSONStringify(value: any, replacer?: any, space?: any): string {
+  const seen = new WeakSet();
+  const circularReplacer = (key: string, val: any) => {
+    if (typeof val === "object" && val !== null) {
+      if (seen.has(val)) {
+        return "[Circular]";
+      }
+      seen.add(val);
+    }
+    if (typeof replacer === "function") {
+      return replacer(key, val);
+    }
+    return val;
+  };
+
+  try {
+    return nativeJSONStringify(value, replacer, space);
+  } catch (err: any) {
+    if (err instanceof TypeError && String(err.message || "").toLowerCase().includes("circular")) {
+      try {
+        return nativeJSONStringify(value, circularReplacer, space);
+      } catch {
+        return '"[Circular Object]"';
+      }
+    }
+    throw err;
+  }
+}
+
+JSON.stringify = safeJSONStringify as any;
+
+// Helper to sanitize any argument to prevent circular references in log bridges
+function sanitizeLogArg(arg: any): any {
+  if (arg === null || arg === undefined) return arg;
+  if (typeof arg !== "object" && typeof arg !== "function") return arg;
+  if (arg instanceof Error) {
+    return String(arg.stack || arg.message || arg);
+  }
+  try {
+    nativeJSONStringify(arg);
+    return arg;
+  } catch {
+    return String(arg.message || arg.name || arg.details || "[Complex Object]");
+  }
+}
+
 // --- Global Error Handlers ---
 window.addEventListener("error", (event) => {
-  const msg = String(event.error?.message || event.message || '').toLowerCase();
+  const msg = String(event.message || event.error?.message || '').toLowerCase();
   if (
+    msg.includes('circular') ||
     msg.includes('script error') ||
     msg.includes('econnreset') || 
     msg.includes('unavailable') || 
@@ -24,12 +74,14 @@ window.addEventListener("error", (event) => {
     console.warn("Transient notice intercepted:", msg);
     return;
   }
-  console.error("Global runtime error:", event.error || event.message);
+  const safeMsg = event.error instanceof Error ? event.error.message : String(event.message || event.error || 'Unknown error');
+  console.error("Global runtime error:", safeMsg);
 }, true);
 
 window.addEventListener("unhandledrejection", (event) => {
   const reasonStr = String(event.reason?.message || event.reason || '').toLowerCase();
   if (
+    reasonStr.includes('circular') ||
     reasonStr.includes('script error') ||
     reasonStr.includes('econnreset') || 
     reasonStr.includes('unavailable') || 
@@ -43,7 +95,8 @@ window.addEventListener("unhandledrejection", (event) => {
     console.warn("Transient unhandled rejection intercepted:", reasonStr);
     return;
   }
-  console.error("Unhandled promise rejection:", event.reason);
+  const safeReason = event.reason instanceof Error ? event.reason.message : String(event.reason || 'Unknown rejection');
+  console.error("Unhandled promise rejection:", safeReason);
 });
 
 // --- Console Patching ---
@@ -61,6 +114,7 @@ const cleanQuotaLogs = (originalFn: (...args: any[]) => void) => {
 
     const lowerStr = argStr.toLowerCase();
     const isQuotaOrTransient = lowerStr.includes('quota') || 
+                                lowerStr.includes('circular') ||
                                 lowerStr.includes('resource_exhausted') || 
                                 lowerStr.includes('limit exceeded') ||
                                 lowerStr.includes('exhausted') ||
@@ -85,7 +139,8 @@ const cleanQuotaLogs = (originalFn: (...args: any[]) => void) => {
       console.log(`[Notice] Intercepted transient or offline notice.`);
       return;
     }
-    originalFn.apply(console, args);
+    const safeArgs = args.map(sanitizeLogArg);
+    originalFn.apply(console, safeArgs);
   };
 };
 

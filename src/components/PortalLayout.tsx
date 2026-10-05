@@ -441,52 +441,54 @@ export function PortalLayout({
           </header>
 
           {/* Main Content Area */}
-          <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scroll-smooth px-3 sm:px-4 lg:px-8 pt-4 sm:pt-6 pb-[calc(112px+env(safe-area-inset-bottom))] lg:pb-12 custom-scrollbar">
-            {activeTab === 'notifications' ? (
-              <div className="space-y-4 max-w-2xl mx-auto">
-                <h2 className="text-xl font-black text-slate-900">Notifications</h2>
-                {notifications.length === 0 ? (
-                  <div className="p-8 text-center bg-white rounded-2xl border border-slate-200">
-                    <Bell className="mx-auto h-8 w-8 text-slate-300 mb-3" />
-                    <p className="text-sm font-medium text-slate-500">No notifications yet.</p>
-                  </div>
-                ) : (
-                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-                    {notifications.map((n) => (
-                      <div key={n.id} className={`p-4 border-b border-slate-100 last:border-b-0 ${n.isRead ? 'bg-slate-50/50' : 'bg-white'}`}>
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1 pr-4">
-                            <h4 className="font-bold text-sm text-slate-900">{n.title}</h4>
-                            <p className="text-xs text-slate-600 mt-1 leading-relaxed">{n.message}</p>
+          <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scroll-smooth px-4 sm:px-6 lg:px-8 py-4 sm:py-6 pb-[calc(112px+env(safe-area-inset-bottom))] lg:pb-12 custom-scrollbar">
+            <div className="w-full max-w-[1600px] mx-auto space-y-4 sm:space-y-6">
+              {activeTab === 'notifications' ? (
+                <div className="space-y-4 max-w-2xl mx-auto">
+                  <h2 className="text-xl font-black text-slate-900">Notifications</h2>
+                  {notifications.length === 0 ? (
+                    <div className="p-8 text-center bg-white rounded-2xl border border-slate-200">
+                      <Bell className="mx-auto h-8 w-8 text-slate-300 mb-3" />
+                      <p className="text-sm font-medium text-slate-500">No notifications yet.</p>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                      {notifications.map((n) => (
+                        <div key={n.id} className={`p-4 border-b border-slate-100 last:border-b-0 ${n.isRead ? 'bg-slate-50/50' : 'bg-white'}`}>
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1 pr-4">
+                              <h4 className="font-bold text-sm text-slate-900">{n.title}</h4>
+                              <p className="text-xs text-slate-600 mt-1 leading-relaxed">{n.message}</p>
+                            </div>
+                            {!n.isRead && db && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const { updateDoc, doc, serverTimestamp } = await import('firebase/firestore');
+                                    await updateDoc(doc(db, 'notifications', n.id), {
+                                      isRead: true,
+                                      readAt: serverTimestamp(),
+                                    });
+                                  } catch (error) {
+                                    console.error('Error marking notification as read:', error);
+                                  }
+                                }}
+                                className="shrink-0 p-1.5 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-xl transition-colors"
+                                title="Mark as read"
+                              >
+                                <Check size={16} strokeWidth={3} />
+                              </button>
+                            )}
                           </div>
-                          {!n.isRead && db && (
-                            <button
-                              onClick={async () => {
-                                try {
-                                  const { updateDoc, doc, serverTimestamp } = await import('firebase/firestore');
-                                  await updateDoc(doc(db, 'notifications', n.id), {
-                                    isRead: true,
-                                    readAt: serverTimestamp(),
-                                  });
-                                } catch (error) {
-                                  console.error('Error marking notification as read:', error);
-                                }
-                              }}
-                              className="shrink-0 p-1.5 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-xl transition-colors"
-                              title="Mark as read"
-                            >
-                              <Check size={16} strokeWidth={3} />
-                            </button>
-                          )}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              children
-            )}
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                children
+              )}
+            </div>
           </main>
 
           {/* Mobile Bottom Navigation */}

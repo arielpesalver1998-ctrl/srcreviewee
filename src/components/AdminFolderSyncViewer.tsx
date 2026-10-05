@@ -4,6 +4,7 @@ import {
   FolderSync,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Eye,
   EyeOff,
   RefreshCw,
@@ -26,7 +27,10 @@ import {
   Calendar,
   Building,
   MapPin,
-  CheckCheck
+  CheckCheck,
+  Pencil,
+  Trash2,
+  Upload
 } from 'lucide-react';
 import {
   fetchAdminFolders,
@@ -36,11 +40,15 @@ import {
   syncFolderAcrossCollections,
   syncAllFoldersAcrossCollections,
   createAdminScoreFolder,
+  updateAdminScoreFolder,
+  deleteAdminScoreFolder,
   AdminScoreFolderSummary,
   FolderSyncVerificationResult
 } from '../services/adminFolderService';
 import { FolderType, FolderPublicationStatus, FOLDER_TYPE_LABELS } from '../constants/folderTypes';
 import { getUserRole } from '../utils/roleUtils';
+import { AddScoreModal } from './AddScoreModal';
+import { BulkScoreUploadModal } from './BulkScoreUploadModal';
 
 interface AdminFolderSyncViewerProps {
   currentUser?: any;
@@ -76,6 +84,28 @@ export const AdminFolderSyncViewer: React.FC<AdminFolderSyncViewerProps> = ({
   const [newFolderStatus, setNewFolderStatus] = useState<FolderPublicationStatus>('published');
   const [newFolderDesc, setNewFolderDesc] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
+
+  // Edit folder modal state
+  const [editingFolder, setEditingFolder] = useState<AdminScoreFolderSummary | null>(null);
+  const [editFolderName, setEditFolderName] = useState('');
+  const [editFolderType, setEditFolderType] = useState<FolderType>('phase_1');
+  const [editFolderStatus, setEditFolderStatus] = useState<FolderPublicationStatus>('published');
+  const [editFolderDesc, setEditFolderDesc] = useState('');
+  const [editFolderIsArchived, setEditFolderIsArchived] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Delete folder modal state
+  const [deletingFolder, setDeletingFolder] = useState<AdminScoreFolderSummary | null>(null);
+  const [hardDeleteChoice, setHardDeleteChoice] = useState(false);
+  const [executingDelete, setExecutingDelete] = useState(false);
+
+  // Add Score modal state
+  const [isAddScoreModalOpen, setIsAddScoreModalOpen] = useState(false);
+  const [scoreModalFolderId, setScoreModalFolderId] = useState<string | null>(null);
+
+  // Bulk CSV Upload modal state
+  const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
+  const [bulkUploadFolderId, setBulkUploadFolderId] = useState<string | null>(null);
 
   const adminUid = currentUser?.uid || currentUser?.id || 'YD0CnZExOigBV1hs3P6FLCPjbAq1';
   const adminEmail = (currentUser?.email || '').toLowerCase();
@@ -201,6 +231,67 @@ export const AdminFolderSyncViewer: React.FC<AdminFolderSyncViewerProps> = ({
     }
   };
 
+  const handleOpenEditModal = (folder: AdminScoreFolderSummary) => {
+    setEditingFolder(folder);
+    setEditFolderName(folder.name);
+    setEditFolderType(folder.folderType);
+    setEditFolderStatus(folder.publicationStatus);
+    setEditFolderDesc(folder.description || '');
+    setEditFolderIsArchived(folder.isArchived);
+  };
+
+  const handleSaveEditFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingFolder || !editFolderName.trim()) return;
+
+    setSavingEdit(true);
+    try {
+      await updateAdminScoreFolder(
+        editingFolder.id,
+        {
+          name: editFolderName.trim(),
+          folderType: editFolderType,
+          publicationStatus: editFolderStatus,
+          description: editFolderDesc.trim(),
+          isArchived: editFolderIsArchived,
+        },
+        currentUser
+      );
+      showToast(`Folder "${editFolderName.trim()}" updated and synced across Firestore!`);
+      setEditingFolder(null);
+    } catch (err: any) {
+      showToast(`Error updating folder: ${err.message || err}`);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleOpenDeleteModal = (folder: AdminScoreFolderSummary) => {
+    setDeletingFolder(folder);
+    setHardDeleteChoice(false);
+  };
+
+  const handleConfirmDeleteFolder = async () => {
+    if (!deletingFolder) return;
+
+    setExecutingDelete(true);
+    try {
+      await deleteAdminScoreFolder(
+        deletingFolder.id,
+        { hardDelete: hardDeleteChoice },
+        currentUser
+      );
+      showToast(
+        `Folder "${deletingFolder.name}" ${hardDeleteChoice ? 'permanently removed' : 'soft deleted / archived'}.`
+      );
+      setDeletingFolder(null);
+    } catch (err: any) {
+      showToast(`Error deleting folder: ${err.message || err}`);
+    } finally {
+      setExecutingDelete(false);
+    }
+  };
+
   // Filtered list
   const filteredFolders = useMemo(() => {
     return folders.filter((f) => {
@@ -241,7 +332,7 @@ export const AdminFolderSyncViewer: React.FC<AdminFolderSyncViewerProps> = ({
   }, [folders]);
 
   return (
-    <div className={`w-full ${isModal ? 'p-6' : 'p-4 sm:p-6'} bg-slate-50 min-h-[600px] flex flex-col`}>
+    <div className={`w-full ${isModal ? 'flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 sm:p-6 pb-16' : 'h-auto p-4 sm:p-6 pb-28'} bg-slate-50 flex flex-col`}>
       {/* Toast */}
       {toastMessage && (
         <div className="fixed top-5 right-5 z-[1000] bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-xs font-bold border border-teal-500/30 animate-in fade-in slide-in-from-top-4">
@@ -274,6 +365,40 @@ export const AdminFolderSyncViewer: React.FC<AdminFolderSyncViewerProps> = ({
 
         {/* Header Actions */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Upload Scores CSV Button */}
+          <button
+            onClick={() => {
+              setBulkUploadFolderId(null);
+              setIsBulkUploadModalOpen(true);
+            }}
+            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-blue-600/20 flex items-center gap-1.5 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            title="Upload examination scores in bulk via CSV file"
+          >
+            <Upload size={14} className="stroke-[2.5]" />
+            <span>Upload Scores CSV</span>
+          </button>
+
+          {/* Add Scores Button */}
+          <button
+            onClick={() => {
+              setScoreModalFolderId(null);
+              setIsAddScoreModalOpen(true);
+            }}
+            className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-black uppercase tracking-wider transition-all shadow-md flex items-center gap-1.5 cursor-pointer shadow-teal-600/20 hover:scale-[1.02] active:scale-[0.98]"
+            title="Add or encode reviewee scores into folders"
+          >
+            <Plus size={15} className="stroke-[2.5]" />
+            <span>Add Scores</span>
+          </button>
+
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+          >
+            <Folder size={14} className="text-teal-400" />
+            <span>New Folder</span>
+          </button>
+
           <button
             onClick={handleSyncAllCollections}
             disabled={syncingAll}
@@ -291,14 +416,6 @@ export const AdminFolderSyncViewer: React.FC<AdminFolderSyncViewerProps> = ({
           >
             <RefreshCw size={14} className={refreshing ? 'animate-spin text-teal-600' : 'text-slate-500'} />
             <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
-          </button>
-
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-black uppercase tracking-wider transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus size={15} />
-            <span>New Folder</span>
           </button>
 
           {isModal && onClose && (
@@ -420,7 +537,7 @@ export const AdminFolderSyncViewer: React.FC<AdminFolderSyncViewerProps> = ({
       </div>
 
       {/* Folders List */}
-      <div className="flex-1 space-y-3">
+      <div className="flex-1 space-y-3 pb-8">
         {loading ? (
           <div className="p-12 text-center bg-white rounded-3xl border border-slate-200">
             <RefreshCw size={28} className="animate-spin text-teal-600 mx-auto mb-3" />
@@ -586,6 +703,32 @@ export const AdminFolderSyncViewer: React.FC<AdminFolderSyncViewerProps> = ({
                     )}
                   </button>
 
+                  {/* Upload CSV directly to this folder */}
+                  <button
+                    onClick={() => {
+                      setBulkUploadFolderId(folder.id);
+                      setIsBulkUploadModalOpen(true);
+                    }}
+                    className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
+                    title={`Upload bulk CSV scores directly to ${folder.name}`}
+                  >
+                    <Upload size={12} className="stroke-[2.5] text-blue-600" />
+                    <span>Upload CSV</span>
+                  </button>
+
+                  {/* Add Score directly to this folder */}
+                  <button
+                    onClick={() => {
+                      setScoreModalFolderId(folder.id);
+                      setIsAddScoreModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    title={`Add or encode reviewee score directly to ${folder.name}`}
+                  >
+                    <Plus size={13} className="stroke-[2.5] text-emerald-600" />
+                    <span>Add Score</span>
+                  </button>
+
                   {/* Verify Sync Diagnostic Button */}
                   <button
                     onClick={() => handleVerifySync(folder.id)}
@@ -598,6 +741,26 @@ export const AdminFolderSyncViewer: React.FC<AdminFolderSyncViewerProps> = ({
                       <CheckCheck size={13} className="text-teal-400" />
                     )}
                     <span>Verify Sync</span>
+                  </button>
+
+                  {/* Edit Folder Button */}
+                  <button
+                    onClick={() => handleOpenEditModal(folder)}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                    title="Edit folder name, type, or status"
+                  >
+                    <Pencil size={13} className="text-slate-600" />
+                    <span>Edit</span>
+                  </button>
+
+                  {/* Remove / Delete Folder Button */}
+                  <button
+                    onClick={() => handleOpenDeleteModal(folder)}
+                    className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                    title="Remove or delete folder"
+                  >
+                    <Trash2 size={13} className="text-rose-600" />
+                    <span>Delete</span>
                   </button>
                 </div>
               </div>
@@ -826,6 +989,264 @@ export const AdminFolderSyncViewer: React.FC<AdminFolderSyncViewerProps> = ({
             </div>
           </form>
         </div>
+      )}
+
+      {/* Edit Folder Modal */}
+      {editingFolder && (
+        <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <form
+            onSubmit={handleSaveEditFolder}
+            className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in zoom-in-95"
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-teal-50 text-teal-700 border border-teal-200 mb-1">
+                  <Pencil size={11} /> Edit Score Folder
+                </div>
+                <h3 className="text-lg font-black text-slate-900">Modify Folder Details</h3>
+                <p className="text-xs text-slate-500 font-medium font-mono">
+                  ID: {editingFolder.id}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingFolder(null)}
+                className="p-1.5 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block mb-1">
+                  Folder Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editFolderName}
+                  onChange={(e) => setEditFolderName(e.target.value)}
+                  placeholder="e.g. Phase 1 Evaluation, Final Mock..."
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:bg-white focus:border-teal-500 transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block mb-1">
+                    Folder Type
+                  </label>
+                  <select
+                    value={editFolderType}
+                    onChange={(e) => setEditFolderType(e.target.value as FolderType)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:bg-white focus:border-teal-500"
+                  >
+                    <option value="phase_1">Phase 1</option>
+                    <option value="phase_2">Phase 2</option>
+                    <option value="marathon">Marathon</option>
+                    <option value="final_coaching">Final Coaching</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block mb-1">
+                    Publication Status
+                  </label>
+                  <select
+                    value={editFolderStatus}
+                    onChange={(e) => setEditFolderStatus(e.target.value as FolderPublicationStatus)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:bg-white focus:border-teal-500"
+                  >
+                    <option value="published">Published (Live in Portal)</option>
+                    <option value="hidden">Hidden from Reviewees</option>
+                    <option value="draft">Draft</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block mb-1">
+                  Description
+                </label>
+                <textarea
+                  rows={2}
+                  value={editFolderDesc}
+                  onChange={(e) => setEditFolderDesc(e.target.value)}
+                  placeholder="Optional description or notes..."
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none focus:bg-white focus:border-teal-500 transition-all resize-none"
+                />
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">Archive Folder</span>
+                  <span className="text-[10px] text-slate-500 font-medium">Archived folders are moved out of active reviewee view.</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={editFolderIsArchived}
+                  onChange={(e) => setEditFolderIsArchived(e.target.checked)}
+                  className="w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500 cursor-pointer"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setEditingFolder(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingEdit || !editFolderName.trim()}
+                className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {savingEdit ? <RefreshCw size={13} className="animate-spin" /> : <Check size={14} />}
+                <span>Save Changes</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Delete / Remove Folder Modal */}
+      {deletingFolder && (
+        <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0">
+                  <Trash2 size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">Remove Score Folder</h3>
+                  <p className="text-xs text-slate-500 font-semibold">{deletingFolder.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeletingFolder(null)}
+                className="p-1.5 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs space-y-1.5 text-amber-900">
+              <div className="flex items-center gap-1.5 font-extrabold text-amber-800">
+                <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+                <span>Impact Assessment</span>
+              </div>
+              <p className="text-[11px] font-medium leading-relaxed">
+                This folder currently has <strong>{deletingFolder.associatedScoresCount} mapped score records</strong> and <strong>{deletingFolder.eligibleRevieweesCount} eligible reviewees</strong> in scope.
+              </p>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+                Select Removal Type
+              </label>
+
+              <div
+                onClick={() => setHardDeleteChoice(false)}
+                className={`p-3 rounded-2xl border cursor-pointer transition-all ${
+                  !hardDeleteChoice
+                    ? 'bg-teal-50/70 border-teal-500 text-teal-950 shadow-xs'
+                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <div className="flex items-center justify-between font-bold text-xs">
+                  <span>Soft Delete / Archive (Recommended)</span>
+                  <input type="radio" checked={!hardDeleteChoice} readOnly className="text-teal-600 cursor-pointer" />
+                </div>
+                <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                  Hides the folder from reviewees and marks it as deleted, preserving student score logs safely.
+                </p>
+              </div>
+
+              <div
+                onClick={() => setHardDeleteChoice(true)}
+                className={`p-3 rounded-2xl border cursor-pointer transition-all ${
+                  hardDeleteChoice
+                    ? 'bg-rose-50/80 border-rose-500 text-rose-950 shadow-xs'
+                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <div className="flex items-center justify-between font-bold text-xs text-rose-700">
+                  <span>Permanent Delete (Hard Removal)</span>
+                  <input type="radio" checked={hardDeleteChoice} readOnly className="text-rose-600 cursor-pointer" />
+                </div>
+                <p className="text-[10px] text-rose-600/80 font-medium mt-0.5">
+                  Permanently deletes the folder document from both scoreFolders and score_folders Firestore collections.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingFolder(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteFolder}
+                disabled={executingDelete}
+                className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50 text-white ${
+                  hardDeleteChoice ? 'bg-rose-600 hover:bg-rose-700' : 'bg-slate-900 hover:bg-slate-800'
+                }`}
+              >
+                {executingDelete ? (
+                  <RefreshCw size={13} className="animate-spin" />
+                ) : (
+                  <Trash2 size={14} />
+                )}
+                <span>{hardDeleteChoice ? 'Permanently Delete' : 'Soft Delete Folder'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Encode Score Modal */}
+      {isAddScoreModalOpen && (
+        <AddScoreModal
+          isOpen={isAddScoreModalOpen}
+          onClose={() => {
+            setIsAddScoreModalOpen(false);
+            setScoreModalFolderId(null);
+          }}
+          currentUser={currentUser}
+          preselectedFolderId={scoreModalFolderId}
+          onScoreAdded={(res) => {
+            showToast(`Score successfully added for ${res.revieweeName} (${res.score}/${res.total})`);
+            handleManualRefresh();
+          }}
+        />
+      )}
+
+      {/* Bulk CSV Score Upload Modal */}
+      {isBulkUploadModalOpen && (
+        <BulkScoreUploadModal
+          isOpen={isBulkUploadModalOpen}
+          onClose={() => {
+            setIsBulkUploadModalOpen(false);
+            setBulkUploadFolderId(null);
+          }}
+          currentUser={currentUser}
+          preselectedFolderId={bulkUploadFolderId}
+          onUploadComplete={(res) => {
+            showToast(`Bulk upload complete! ${res.successCount} score(s) imported.`);
+            handleManualRefresh();
+          }}
+        />
       )}
     </div>
   );

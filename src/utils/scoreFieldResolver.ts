@@ -1,3 +1,6 @@
+import { getUserRole, isAdmin, isStaff, isSuperAdminEmail } from './roleUtils';
+import { getUserAccountStatus } from '../services/userIdentityResolver';
+
 export type ScoreValue = {
   earnedScore: number | null;
   possiblePoints: number;
@@ -19,38 +22,48 @@ export function getResolvedDetailedScore(
   const catKey = normalizeScoreCategory(category);
   const subjKey = normalizeScoreSubject(subject);
 
-  // 1. Check scoresByDate for any entry belonging to this category and subject
+  // 1. Check scoresByDate & assessmentRecords for any entry belonging to this category and subject
+  const allEntries: any[] = [];
   if (reviewee?.scoresByDate && typeof reviewee.scoresByDate === "object") {
-    const entries = Object.values(reviewee.scoresByDate).filter((entry: any) => {
+    allEntries.push(...Object.values(reviewee.scoresByDate));
+  }
+  if (reviewee?.assessmentRecords && typeof reviewee.assessmentRecords === "object") {
+    allEntries.push(...Object.values(reviewee.assessmentRecords));
+  }
+
+  if (allEntries.length > 0) {
+    const entries = allEntries.filter((entry: any) => {
       if (!entry || typeof entry !== "object") return false;
+      if (entry.publicationStatus === "hidden") return false;
 
       const entryCat = String(entry.category || "").toLowerCase();
       const entryCatKey = normalizeScoreCategory(entry.categoryKey || entryCat);
 
       if (entryCatKey !== catKey && !entryCat.includes(catKey)) return false;
 
-      const entrySubjKey = normalizeScoreSubject(entry.subject || entryCat);
+      const rawSubj = entry.subject || entry.area || entry.subjectCode || "";
+      const entrySubjKey = normalizeScoreSubject(rawSubj);
       const subjMatches =
         entrySubjKey === subjKey ||
         entryCat.includes(subjKey) ||
-        String(entry.subject || "").toLowerCase().includes(subjKey);
+        String(rawSubj).toLowerCase().includes(subjKey);
 
       return subjMatches;
     });
 
     if (entries.length > 0) {
       entries.sort((a: any, b: any) => {
-        const timeA = new Date(a.updatedAt || a.date || 0).getTime();
-        const timeB = new Date(b.updatedAt || b.date || 0).getTime();
+        const timeA = new Date(a.updatedAt || a.createdAt || a.date || 0).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt || b.date || 0).getTime();
         return timeB - timeA;
       });
 
       const bestEntry: any = entries[0];
       const earned = parseOptionalNumber(
-        bestEntry.earnedPoints ?? bestEntry.rawScore ?? bestEntry.score
+        bestEntry.earnedPoints ?? bestEntry.earnedScore ?? bestEntry.rawScore ?? bestEntry.score
       );
       const possible = parseOptionalNumber(
-        bestEntry.possiblePoints ?? bestEntry.totalItems
+        bestEntry.possiblePoints ?? bestEntry.totalScore ?? bestEntry.totalItems
       );
 
       if (earned !== null) {
@@ -242,4 +255,40 @@ export function isScoreAreaActivated({
       reviewee?.[scoreField] !== undefined &&
       reviewee?.[scoreField] !== ""
   );
+}
+
+export {
+  isValidActiveRevieweeWithId,
+  isCanonicalActiveReviewee,
+  getCanonicalRevieweeId,
+  getCanonicalActiveReviewees,
+  getCanonicalActiveRevieweeCount,
+  normalizeStatus,
+  normalizeRole,
+  isValidRevieweeId,
+} from './canonicalActiveReviewee';
+
+/**
+ * Checks if a score record area matches a given subtopic code (e.g. 'CLJ 1') or title.
+ */
+export function isMatchingSubtopic(
+  recordArea: string,
+  subtopicCode: string,
+  subtopicTitle?: string
+): boolean {
+  if (!recordArea || !subtopicCode) return false;
+  const normArea = recordArea.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normCode = subtopicCode.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  if (normArea === normCode) return true;
+  if (normArea.startsWith(normCode)) return true;
+
+  if (subtopicTitle) {
+    const normTitle = subtopicTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (normArea === normTitle || normArea.includes(normTitle) || normTitle.includes(normArea)) {
+      return true;
+    }
+  }
+
+  return false;
 }

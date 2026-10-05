@@ -781,3 +781,105 @@ export async function createAdminScoreFolder(
 
   return newFolder;
 }
+
+/**
+ * Updates an existing score folder in both scoreFolders and score_folders Firestore collections
+ */
+export async function updateAdminScoreFolder(
+  folderId: string,
+  updateData: {
+    name?: string;
+    folderType?: FolderType;
+    publicationStatus?: FolderPublicationStatus;
+    schoolScope?: 'all' | 'selected';
+    selectedSchoolIds?: string[];
+    selectedSchoolNames?: string[];
+    branchScope?: 'all' | 'selected';
+    selectedBranchIds?: string[];
+    selectedBranchNames?: string[];
+    description?: string;
+    startDate?: string;
+    endDate?: string | null;
+    includeInReadiness?: boolean;
+    readinessWeight?: number;
+    isArchived?: boolean;
+    isDeleted?: boolean;
+  },
+  adminUser?: any
+): Promise<void> {
+  if (!firestoreDb) throw new Error('Firestore is not configured.');
+
+  const now = new Date().toISOString();
+  const updatedBy = adminUser?.uid || adminUser?.id || 'YD0CnZExOigBV1hs3P6FLCPjbAq1';
+
+  const payload: any = {
+    ...updateData,
+    updatedAt: now,
+    updatedBy,
+  };
+
+  if (updateData.name) {
+    payload.name = updateData.name.trim();
+    payload.normalizedName = updateData.name.toLowerCase().trim();
+  }
+
+  if (updateData.folderType) {
+    payload.type = updateData.folderType;
+    payload.folderType = updateData.folderType;
+  }
+
+  if (updateData.publicationStatus) {
+    payload.publicationStatus = updateData.publicationStatus;
+    payload.isPublished = updateData.publicationStatus === 'published';
+  }
+
+  // Write updates to both collections (fallback to setDoc with merge if doc does not exist)
+  await Promise.all([
+    updateDoc(doc(firestoreDb, 'scoreFolders', folderId), payload).catch(() =>
+      setDoc(doc(firestoreDb, 'scoreFolders', folderId), payload, { merge: true })
+    ),
+    updateDoc(doc(firestoreDb, 'score_folders', folderId), payload).catch(() =>
+      setDoc(doc(firestoreDb, 'score_folders', folderId), payload, { merge: true })
+    ),
+  ]);
+}
+
+/**
+ * Removes or marks a score folder as deleted/archived in Firestore collections
+ */
+export async function deleteAdminScoreFolder(
+  folderId: string,
+  options?: { hardDelete?: boolean },
+  adminUser?: any
+): Promise<void> {
+  if (!firestoreDb) throw new Error('Firestore is not configured.');
+
+  if (options?.hardDelete) {
+    // Permanently remove document from both collections
+    await Promise.all([
+      deleteDoc(doc(firestoreDb, 'scoreFolders', folderId)).catch(() => {}),
+      deleteDoc(doc(firestoreDb, 'score_folders', folderId)).catch(() => {}),
+    ]);
+  } else {
+    // Soft delete (hide and mark as deleted)
+    const now = new Date().toISOString();
+    const updatedBy = adminUser?.uid || adminUser?.id || 'YD0CnZExOigBV1hs3P6FLCPjbAq1';
+    const payload = {
+      isDeleted: true,
+      publicationStatus: 'hidden',
+      isPublished: false,
+      updatedAt: now,
+      updatedBy,
+    };
+
+    await Promise.all([
+      updateDoc(doc(firestoreDb, 'scoreFolders', folderId), payload).catch(() =>
+        setDoc(doc(firestoreDb, 'scoreFolders', folderId), payload, { merge: true })
+      ),
+      updateDoc(doc(firestoreDb, 'score_folders', folderId), payload).catch(() =>
+        setDoc(doc(firestoreDb, 'score_folders', folderId), payload, { merge: true })
+      ),
+    ]);
+  }
+}
+

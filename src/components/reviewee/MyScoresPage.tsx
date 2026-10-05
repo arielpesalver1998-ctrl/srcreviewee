@@ -13,6 +13,7 @@ import { useRevieweeMyScoresPreferences } from '../../hooks/useRevieweeMyScoresP
 import { calculateRevieweeArea } from '../../utils/calculateRevieweeArea';
 import { DEFAULT_GRADE_WEIGHTS, GradeWeights, GradeCategoryKey } from '../../utils/gradeCalculation';
 import { isFolderVisibleToReviewee } from '../../constants/folderTypes';
+import { MyScoresTable } from '../scores/MyScoresTable';
 
 const DEFAULT_MAIN_SCORE_FOLDER: ScoreFolder = {
   id: 'main',
@@ -328,13 +329,16 @@ export function MyScoresPage({ revieweeData, scores, gradeWeights = DEFAULT_GRAD
 
   return (
     <div className="space-y-4 sm:space-y-6 lg:space-y-8 p-3 sm:p-5 lg:p-6">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-black text-slate-900">My Scores</h1>
-        <p className="text-xs sm:text-sm text-slate-600">
-          View your scores by board subject area, examination category, and evaluation dates.
-        </p>
+      {/* Official Master My Scores Card */}
+      <MyScoresTable revieweeData={revieweeData} scores={scores} />
+
+      {/* Detailed Folder & Examination Category Filters */}
+      <div className="pt-4 border-t border-slate-200/80">
+        <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+          Detailed Score Folder & Examination Category Explorer
+        </span>
         {selectedFolder && (
-          <div className="mt-2.5 sm:mt-4">
+          <div className="mt-2.5">
             <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">Currently Viewing:</span>
             <div className="text-xs sm:text-sm font-black text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full inline-block ml-2 border border-teal-100">
               {selectedFolder.name}

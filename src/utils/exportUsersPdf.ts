@@ -1,7 +1,9 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { resolveCanonicalUserIdentity, formatFormalName, cleanOptionalName, deduplicateUsersByIdNumber, getUserAccountStatus, isValidUserRecord } from '../services/userIdentityResolver';
+import { isCanonicalActiveReviewee, normalizeRole } from './canonicalActiveReviewee';
 import { getUserRole } from './roleUtils';
+import { getTierLabel } from '../config/tierConfig';
 
 export interface ExportUsersPdfOptions {
   statusFilter?: 'all' | 'active' | 'dropped' | 'pending'; // 'all' = include active + dropped, 'active' = active only, 'dropped' = dropped only, 'pending' = pending profile only
@@ -33,33 +35,32 @@ export async function downloadRegisteredUsersPdf(
 
     const filtered = uniqueUsers.filter((u) => {
       const accountStatus = getUserAccountStatus(u);
-      if (accountStatus === 'merged' || accountStatus === 'deleted') {
+      if (accountStatus === 'merged' || accountStatus === 'deleted' || u.isDeleted || u.deleted) {
         return false;
       }
 
+      const role = normalizeRole(getUserRole(u));
+
       if (options.statusFilter === 'active') {
-        if (accountStatus !== 'active' || !isValidUserRecord(u)) {
-          return false;
+        if (role === 'reviewee') {
+          if (!isCanonicalActiveReviewee(u)) return false;
+        } else {
+          if (accountStatus !== 'active') return false;
         }
       } else if (options.statusFilter === 'dropped') {
         if (accountStatus !== 'dropped') {
           return false;
         }
       } else if (options.statusFilter === 'pending') {
-        if (accountStatus !== 'pending_profile') {
-          return false;
+        if (role === 'reviewee') {
+          if (isCanonicalActiveReviewee(u) || accountStatus === 'dropped') return false;
+        } else {
+          if (accountStatus !== 'pending_profile') return false;
         }
       } else if (options.statusFilter === 'all') {
-        // 'all' includes active and dropped users
-        if (accountStatus !== 'active' && accountStatus !== 'dropped') {
-          return false;
-        }
-        if (accountStatus === 'active' && !isValidUserRecord(u)) {
-          return false;
-        }
+        // 'all' includes active, dropped, and pending registered users
       }
 
-      const role = getUserRole(u).toLowerCase();
       if (options.roleFilter && options.roleFilter !== 'all' && role !== options.roleFilter.toLowerCase()) {
         return false;
       }
@@ -162,6 +163,7 @@ export async function downloadRegisteredUsersPdf(
     const tableRows = filtered.map((u, index) => {
       const canonical = resolveCanonicalUserIdentity(u);
       const role = getUserRole(u);
+      const tierLabel = getTierLabel(u.tier || u.userTier || u.subscription || u.membership);
       const formalName = formatFormalName(canonical);
       const idNum = canonical.idNumber || u.seq_id || u.seqId || u.id_number || '—';
       const school = canonical.school || u.school_name || u.schoolName || u.school || '—';
@@ -176,6 +178,7 @@ export async function downloadRegisteredUsersPdf(
         idNum,
         formalName,
         role.toUpperCase(),
+        tierLabel.toUpperCase(),
         statusLabel,
         canonical.email || '—',
         school,
@@ -186,7 +189,7 @@ export async function downloadRegisteredUsersPdf(
     // Render AutoTable
     autoTable(doc, {
       startY: 92,
-      head: [['#', 'ID Number', 'Full Name', 'Role', 'Status', 'Email Address', 'School / University', 'Branch']],
+      head: [['#', 'ID Number', 'Full Name', 'Role', 'Tier', 'Status', 'Email Address', 'School / University', 'Branch']],
       body: tableRows,
       theme: 'grid',
       styles: {
@@ -204,14 +207,15 @@ export async function downloadRegisteredUsersPdf(
         fontSize: 8,
       },
       columnStyles: {
-        0: { cellWidth: 24, halign: 'center' },
-        1: { cellWidth: 70, fontStyle: 'bold' },
-        2: { cellWidth: 150, fontStyle: 'bold' },
-        3: { cellWidth: 55, halign: 'center' },
-        4: { cellWidth: 55, halign: 'center' },
-        5: { cellWidth: 160 },
-        6: { cellWidth: 160 },
-        7: { cellWidth: 80 },
+        0: { cellWidth: 22, halign: 'center' },
+        1: { cellWidth: 65, fontStyle: 'bold' },
+        2: { cellWidth: 135, fontStyle: 'bold' },
+        3: { cellWidth: 50, halign: 'center' },
+        4: { cellWidth: 70, halign: 'center', fontStyle: 'bold' },
+        5: { cellWidth: 55, halign: 'center' },
+        6: { cellWidth: 140 },
+        7: { cellWidth: 140 },
+        8: { cellWidth: 75 },
       },
       didParseCell: (data) => {
         // Highlight Dropped status in red/rose

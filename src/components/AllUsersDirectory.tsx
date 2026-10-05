@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { Users, Search, Shield, UserCheck, Mail, Building2, MapPin, CheckCircle2, Filter, Wrench, Trash2, Download, FileText, Loader2, X, ChevronDown, UserX, Calendar } from 'lucide-react';
+import { Users, Search, Shield, UserCheck, Mail, Building2, MapPin, CheckCircle2, Filter, Wrench, Trash2, Download, FileText, Loader2, X, ChevronDown, UserX, Calendar, Plus } from 'lucide-react';
 import { getUserRole } from '../utils/roleUtils';
 import { normalizeNameForComparison } from '../utils/nameNormalization';
 import { resolveCanonicalUserIdentity, isValidUserRecord, formatMiddleName, compareUsersAlphabetically, formatFormalName, deduplicateUsersByIdNumber, getUserAccountStatus } from '../services/userIdentityResolver';
+import { isCanonicalActiveReviewee, normalizeRole } from '../utils/canonicalActiveReviewee';
 import { SimpleTable } from './DashboardKit';
 import { RepairEmailModal } from './RepairEmailModal';
 import { UserAvatar } from './UserAvatar';
@@ -50,6 +51,7 @@ interface AllUsersDirectoryProps {
   onDownloadCsv?: () => void;
   isExportingCsv?: boolean;
   initialRoleFilter?: string;
+  onAddScore?: (user: any) => void;
 }
 
 export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({ 
@@ -61,6 +63,7 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
   onDownloadCsv,
   isExportingCsv = false,
   initialRoleFilter = 'all',
+  onAddScore,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>(initialRoleFilter);
@@ -97,7 +100,7 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
   }, [users]);
 
   // Compute counts for roles and status
-  const counts = useMemo(() => {
+  const { roleCounts, statusCounts } = useMemo(() => {
     const valid = uniqueUsers.filter((u) => {
       const status = getUserAccountStatus(u);
       return status !== 'merged' && status !== 'deleted';
@@ -107,56 +110,89 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
     let admin = 0;
     let staff = 0;
     let reviewee = 0;
-    let active = 0;
-    let dropped = 0;
-    let pending = 0;
 
     valid.forEach((u) => {
-      const status = getUserAccountStatus(u);
       all++;
-      if (status === 'active') {
-        active++;
-      } else if (status === 'dropped') {
-        dropped++;
-      } else if (status === 'pending_profile') {
-        pending++;
-      }
-
       const r = getUserRole(u).toLowerCase();
       if (r === 'admin') admin++;
       else if (r === 'staff') staff++;
       else reviewee++;
     });
 
-    return { all, admin, staff, reviewee, active, dropped, pending };
-  }, [uniqueUsers]);
+    // Compute status counts scoped to selected roleFilter
+    const roleFiltered = valid.filter((u) => {
+      if (roleFilter === 'all') return true;
+      const r = normalizeRole(getUserRole(u));
+      return r === roleFilter.toLowerCase();
+    });
+
+    let statusAll = 0;
+    let statusActive = 0;
+    let statusDropped = 0;
+    let statusPending = 0;
+
+    roleFiltered.forEach((u) => {
+      statusAll++;
+      const r = normalizeRole(getUserRole(u));
+      if (r === 'reviewee') {
+        if (isCanonicalActiveReviewee(u)) {
+          statusActive++;
+        } else {
+          const s = getUserAccountStatus(u);
+          if (s === 'dropped') statusDropped++;
+          else statusPending++;
+        }
+      } else {
+        const s = getUserAccountStatus(u);
+        if (s === 'active') statusActive++;
+        else if (s === 'dropped') statusDropped++;
+        else statusPending++;
+      }
+    });
+
+    return {
+      roleCounts: { all, admin, staff, reviewee },
+      statusCounts: {
+        all: statusAll,
+        active: statusActive,
+        dropped: statusDropped,
+        pending: statusPending,
+      },
+    };
+  }, [uniqueUsers, roleFilter]);
+
+  const counts = { ...roleCounts, ...statusCounts };
 
   const filteredUsers = useMemo(() => {
     const list = uniqueUsers.filter((u) => {
       const status = getUserAccountStatus(u);
-      if (status === 'merged' || status === 'deleted') {
+      if (status === 'merged' || status === 'deleted' || u.isDeleted || u.deleted) {
+        return false;
+      }
+
+      const role = normalizeRole(getUserRole(u));
+      if (roleFilter !== 'all' && role !== roleFilter.toLowerCase()) {
         return false;
       }
 
       if (statusFilter === 'active') {
-        if (status !== 'active') {
-          return false;
+        if (role === 'reviewee') {
+          if (!isCanonicalActiveReviewee(u)) return false;
+        } else {
+          if (status !== 'active') return false;
         }
       } else if (statusFilter === 'dropped') {
         if (status !== 'dropped') {
           return false;
         }
       } else if (statusFilter === 'pending') {
-        if (status !== 'pending_profile') {
-          return false;
+        if (role === 'reviewee') {
+          if (isCanonicalActiveReviewee(u) || status === 'dropped') return false;
+        } else {
+          if (status !== 'pending_profile') return false;
         }
       } else if (statusFilter === 'all') {
         // In "ALL", show all active, dropped, and pending registered accounts
-      }
-
-      const role = getUserRole(u);
-      if (roleFilter !== 'all' && role.toLowerCase() !== roleFilter.toLowerCase()) {
-        return false;
       }
 
       if (!searchQuery.trim()) return true;
@@ -401,6 +437,19 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
               </>
             )}
 
+            {/* Add Score Button */}
+            {onAddScore && (
+              <button
+                type="button"
+                onClick={() => onAddScore(null)}
+                className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                title="Add/encode a new score for any reviewee"
+              >
+                <Plus size={14} className="text-teal-400 stroke-[3]" />
+                <span>Add Score</span>
+              </button>
+            )}
+
             {/* Download PDF Button with Modal Trigger */}
             <button
               onClick={() => setIsPdfModalOpen(true)}
@@ -618,6 +667,17 @@ export const AllUsersDirectory: React.FC<AllUsersDirectoryProps> = ({
                 }
                 return (
                   <div className="flex items-center justify-center gap-1.5">
+                    {onAddScore && (r.role === 'Reviewee' || !r.role) && (
+                      <button
+                        type="button"
+                        onClick={() => onAddScore(r.originalUser)}
+                        className="px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider bg-teal-50 text-teal-700 hover:bg-teal-100 transition-all cursor-pointer border border-teal-200 flex items-center gap-0.5 shadow-2xs"
+                        title={`Add score for ${r.name}`}
+                      >
+                        <Plus size={10} className="stroke-[2.5]" />
+                        <span>Score</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => onEditUser(r.originalUser)}

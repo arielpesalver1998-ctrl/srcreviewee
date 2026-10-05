@@ -1,7 +1,9 @@
 import { collection, getDocs, Timestamp } from 'firebase/firestore';
 import { firestoreDb } from './firebaseClient';
 import { resolveCanonicalUserIdentity, formatFormalName, cleanOptionalName, deduplicateUsersByIdNumber, getUserAccountStatus } from '../services/userIdentityResolver';
+import { isCanonicalActiveReviewee, normalizeRole } from './canonicalActiveReviewee';
 import { getUserRole } from './roleUtils';
+import { getTierLabel } from '../config/tierConfig';
 
 function escapeCsvCell(value: any): string {
   if (value === null || value === undefined) return '""';
@@ -94,6 +96,7 @@ export async function downloadRegisteredUsersCsv(fallbackUsers?: any[]): Promise
     .map((u) => {
       const canonical = resolveCanonicalUserIdentity(u);
       const role = getUserRole(u);
+      const tierLabel = getTierLabel(u.tier || u.userTier || u.subscription || u.membership);
       const formalName = formatFormalName(canonical);
       const totalScores = countScores(u);
       const regDate = formatDate(u.createdAt || u.created_at || u.registrationDate || u.registeredAt);
@@ -105,10 +108,13 @@ export async function downloadRegisteredUsersCsv(fallbackUsers?: any[]): Promise
         middleName: cleanOptionalName(canonical.middleName || u.middle_name || u.middleName || ''),
         fullName: formalName || canonical.fullName || u.displayName || '',
         role: role,
+        tier: tierLabel,
         email: canonical.email || u.email || '',
         school: canonical.school || u.school_name || u.schoolName || u.school || '',
         branch: canonical.branch || u.review_branch || u.reviewBranch || u.branch || '',
-        accountStatus: getUserAccountStatus(u),
+        accountStatus: normalizeRole(role) === 'reviewee' 
+          ? (isCanonicalActiveReviewee(u) ? 'active' : (getUserAccountStatus(u) === 'dropped' ? 'dropped' : 'pending_profile'))
+          : getUserAccountStatus(u),
         authProvider: u.authProvider || u.registrationMethod || (u.providerData?.[0]?.providerId) || 'password',
         scoresCount: totalScores,
         registrationDate: regDate,
@@ -132,6 +138,7 @@ export async function downloadRegisteredUsersCsv(fallbackUsers?: any[]): Promise
     'Middle Name',
     'Full Name',
     'Role',
+    'User Tier',
     'Email Address',
     'School / University',
     'Review Branch',
@@ -154,6 +161,7 @@ export async function downloadRegisteredUsersCsv(fallbackUsers?: any[]): Promise
       escapeCsvCell(u.middleName),
       escapeCsvCell(u.fullName),
       escapeCsvCell(u.role),
+      escapeCsvCell(u.tier),
       escapeCsvCell(u.email),
       escapeCsvCell(u.school),
       escapeCsvCell(u.branch),
